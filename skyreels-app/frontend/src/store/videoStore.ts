@@ -3,11 +3,12 @@
  */
 
 import { create } from 'zustand';
-import type { Video, ModelType, Resolution } from '@/types/video';
+import type { Video, ModelType, ModelSize, Resolution } from '@/types/video';
 
 interface VideoFormState {
   prompt: string;
   modelType: ModelType;
+  modelSize: ModelSize;
   resolution: Resolution;
   numFrames: number;
   guidanceScale: number;
@@ -34,6 +35,7 @@ interface VideoStore {
 const defaultFormState: VideoFormState = {
   prompt: '',
   modelType: 't2v',
+  modelSize: '14B',
   resolution: '540P',
   numFrames: 97,
   guidanceScale: 6.0,

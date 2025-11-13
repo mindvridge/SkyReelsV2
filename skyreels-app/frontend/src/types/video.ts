@@ -3,12 +3,14 @@
  */
 
 export type ModelType = 't2v' | 'i2v' | 'df';
+export type ModelSize = '1.3B' | '14B';
 export type Resolution = '540P' | '720P';
 export type VideoStatus = 'queued' | 'processing' | 'completed' | 'failed';
 
 export interface VideoCreateRequest {
   prompt: string;
   model_type: ModelType;
+  model_size: ModelSize;
   resolution: Resolution;
   num_frames: number;
   guidance_scale: number;
@@ -20,6 +22,7 @@ export interface Video {
   id: string;
   prompt: string;
   model_type: ModelType;
+  model_size: ModelSize;
   resolution: Resolution;
   num_frames: number;
   guidance_scale: number;

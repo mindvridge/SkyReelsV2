@@ -100,6 +100,7 @@ def generate_video_task(self, job_id: str, params: dict):
         # Initialize generator
         generator = SkyReelsGenerator(
             model_type=params["model_type"],
+            model_size=params.get("model_size", "14B"),
             resolution=params["resolution"],
             model_cache_dir=settings.SKYREELS_MODEL_CACHE,
         )

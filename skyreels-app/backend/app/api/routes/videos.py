@@ -55,6 +55,7 @@ async def generate_video(
         video = Video(
             prompt=request.prompt,
             model_type=request.model_type.value,
+            model_size=request.model_size.value,
             resolution=request.resolution.value,
             num_frames=request.num_frames,
             guidance_scale=request.guidance_scale,
@@ -68,12 +69,13 @@ async def generate_video(
         db.commit()
         db.refresh(video)
 
-        logger.info(f"Created video job: {video.id}")
+        logger.info(f"Created video job: {video.id} (model: {request.model_size.value})")
 
         # Queue Celery task
         task_params = {
             "prompt": request.prompt,
             "model_type": request.model_type.value,
+            "model_size": request.model_size.value,
             "resolution": request.resolution.value,
             "num_frames": request.num_frames,
             "guidance_scale": request.guidance_scale,

@@ -17,18 +17,28 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
-# AI/ML
-torch==2.1.2
-torchvision==0.16.2
-diffusers==0.25.1
-transformers==4.37.2
-accelerate==0.26.1
+# AI/ML - SkyReels V2 Requirements
+torch==2.5.1
+torchvision==0.20.1
+diffusers>=0.31.0
+transformers==4.49.0
+tokenizers==0.21.1
+accelerate==1.6.0
 safetensors==0.4.2
 Pillow==10.2.0
 
+# SkyReels V2 Specific
+flash-attn
+xfuser
+easydict
+ftfy
+numpy>=1.23.5,<2
+
 # Video processing
-opencv-python==4.9.0.80
-opencv-python-headless==4.9.0.80
+opencv-python==4.10.0.84
+imageio
+imageio-ffmpeg
+tqdm
 
 # AWS S3 (optional)
 boto3==1.34.34

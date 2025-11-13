@@ -35,6 +35,7 @@ export const VideoGenerator: React.FC = () => {
     const request: VideoCreateRequest = {
       prompt: form.prompt,
       model_type: form.modelType,
+      model_size: form.modelSize,
       resolution: form.resolution,
       num_frames: form.numFrames,
       guidance_scale: form.guidanceScale,
@@ -92,6 +93,24 @@ export const VideoGenerator: React.FC = () => {
               <option value="i2v">Image-to-Video (I2V)</option>
               <option value="df">Diffusion Forcing (DF) - Infinite Length</option>
             </Select>
+          </div>
+
+          {/* Model Size */}
+          <div className="space-y-2">
+            <Label htmlFor="modelSize">Model Size</Label>
+            <Select
+              id="modelSize"
+              value={form.modelSize}
+              onChange={(e) => setForm({ modelSize: e.target.value as any })}
+            >
+              <option value="14B">14B (~51GB VRAM, Higher Quality)</option>
+              <option value="1.3B">1.3B (~15GB VRAM, Faster)</option>
+            </Select>
+            <p className="text-xs text-gray-500">
+              {form.modelSize === '14B'
+                ? '14B model requires A100 80GB or similar GPU'
+                : '1.3B model works on RTX 3090/4090 (24GB VRAM)'}
+            </p>
           </div>
 
           {/* Image URL for I2V */}

@@ -1,96 +1,171 @@
-"""SkyReels V2 video generation service"""
+"""SkyReels V2 video generation service - Official API Integration"""
 
-import os
 import torch
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Literal
+from diffusers import (
+    AutoModel,
+    SkyReelsV2DiffusionForcingPipeline,
+    SkyReelsV2DiffusionForcingImageToVideoPipeline,
+    UniPCMultistepScheduler,
+)
+from diffusers.utils import export_to_video, load_image
 import cv2
-import numpy as np
-from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 
 class SkyReelsGenerator:
     """
-    SkyReels V2 video generation service
+    SkyReels V2 video generation service using official Diffusers API
     Supports Text-to-Video (T2V), Image-to-Video (I2V), and Diffusion Forcing (DF) modes
+    Supports both 14B and 1.3B model sizes
     """
 
-    def __init__(self, model_type: str, resolution: str, model_cache_dir: str = "/models"):
+    def __init__(
+        self,
+        model_type: Literal["t2v", "i2v", "df"],
+        resolution: Literal["540P", "720P"],
+        model_size: Literal["1.3B", "14B"] = "14B",
+        model_cache_dir: str = "/models"
+    ):
         """
-        Initialize the SkyReels generator with specified model type and resolution
+        Initialize the SkyReels generator
 
         Args:
             model_type: One of 't2v', 'i2v', or 'df'
             resolution: One of '540P' or '720P'
+            model_size: One of '1.3B' or '14B' (default: '14B')
             model_cache_dir: Directory for caching models
         """
         self.model_type = model_type.lower()
         self.resolution = resolution
+        self.model_size = model_size
         self.model_cache_dir = model_cache_dir
         self.pipeline = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        logger.info(f"Initializing SkyReels generator: {model_type}, {resolution}, device: {self.device}")
+        logger.info(
+            f"Initializing SkyReels generator: "
+            f"type={model_type}, size={model_size}, res={resolution}, device={self.device}"
+        )
+
+        # Model mapping: {model_type: {model_size: {resolution: model_id}}}
+        self.model_mapping = {
+            "t2v": {
+                "14B": {
+                    "540P": "Skywork/SkyReels-V2-DF-14B-540P-Diffusers",
+                    "720P": "Skywork/SkyReels-V2-DF-14B-720P-Diffusers",
+                },
+                "1.3B": {
+                    "540P": "Skywork/SkyReels-V2-DF-1.3B-540P-Diffusers",
+                    # 1.3B 720P is not available, fallback to 540P
+                    "720P": "Skywork/SkyReels-V2-DF-1.3B-540P-Diffusers",
+                },
+            },
+            "i2v": {
+                "14B": {
+                    "540P": "Skywork/SkyReels-V2-I2V-14B-540P-Diffusers",
+                    "720P": "Skywork/SkyReels-V2-I2V-14B-720P-Diffusers",
+                },
+                "1.3B": {
+                    "540P": "Skywork/SkyReels-V2-I2V-1.3B-540P-Diffusers",
+                    "720P": "Skywork/SkyReels-V2-I2V-1.3B-540P-Diffusers",  # Fallback
+                },
+            },
+            "df": {
+                "14B": {
+                    "540P": "Skywork/SkyReels-V2-DF-14B-540P-Diffusers",
+                    "720P": "Skywork/SkyReels-V2-DF-14B-720P-Diffusers",
+                },
+                "1.3B": {
+                    "540P": "Skywork/SkyReels-V2-DF-1.3B-540P-Diffusers",
+                    "720P": "Skywork/SkyReels-V2-DF-1.3B-540P-Diffusers",  # Fallback
+                },
+            },
+        }
 
         # Load the appropriate pipeline
         self._load_pipeline()
 
     def _load_pipeline(self):
-        """Load the appropriate Diffusers pipeline based on model type"""
+        """Load the appropriate Diffusers pipeline based on model configuration"""
         try:
-            from diffusers import DiffusionPipeline
+            # Get model ID
+            model_id = (
+                self.model_mapping
+                .get(self.model_type, {})
+                .get(self.model_size, {})
+                .get(self.resolution)
+            )
 
-            # Determine model ID based on type and resolution
-            model_mapping = {
-                "t2v": {
-                    "540P": "Skywork/SkyReels-V2-T2V-14B-540P",
-                    "720P": "Skywork/SkyReels-V2-T2V-14B-720P",
-                },
-                "i2v": {
-                    "540P": "Skywork/SkyReels-V2-I2V-14B-540P",
-                    "720P": "Skywork/SkyReels-V2-I2V-14B-720P",
-                },
-                "df": {
-                    "540P": "Skywork/SkyReels-V2-DF-14B-540P",
-                    "720P": "Skywork/SkyReels-V2-DF-14B-720P",
-                },
-            }
-
-            model_id = model_mapping.get(self.model_type, {}).get(self.resolution)
             if not model_id:
-                raise ValueError(f"Invalid model type or resolution: {self.model_type}, {self.resolution}")
+                raise ValueError(
+                    f"Invalid configuration: type={self.model_type}, "
+                    f"size={self.model_size}, resolution={self.resolution}"
+                )
 
             logger.info(f"Loading model: {model_id}")
 
-            # Load pipeline with optimizations
-            self.pipeline = DiffusionPipeline.from_pretrained(
+            # Load VAE with float32 (required for quality)
+            logger.info("Loading VAE (float32)...")
+            vae = AutoModel.from_pretrained(
                 model_id,
+                subfolder="vae",
+                torch_dtype=torch.float32,
+                cache_dir=self.model_cache_dir,
+            )
+
+            # Load Transformer with bfloat16 (memory optimization)
+            logger.info("Loading Transformer (bfloat16)...")
+            transformer = AutoModel.from_pretrained(
+                model_id,
+                subfolder="transformer",
                 torch_dtype=torch.bfloat16,
                 cache_dir=self.model_cache_dir,
             )
 
+            # Select pipeline class and flow_shift
+            if self.model_type == "i2v":
+                PipelineClass = SkyReelsV2DiffusionForcingImageToVideoPipeline
+                flow_shift = 5.0
+                logger.info("Using Image-to-Video pipeline (flow_shift=5.0)")
+            else:  # t2v or df
+                PipelineClass = SkyReelsV2DiffusionForcingPipeline
+                flow_shift = 8.0
+                logger.info("Using Text-to-Video/DF pipeline (flow_shift=8.0)")
+
+            # Initialize pipeline
+            logger.info("Initializing pipeline...")
+            self.pipeline = PipelineClass.from_pretrained(
+                model_id,
+                vae=vae,
+                transformer=transformer,
+                torch_dtype=torch.bfloat16,
+                cache_dir=self.model_cache_dir,
+            )
+
+            # Configure scheduler with flow_shift
+            logger.info("Configuring scheduler...")
+            self.pipeline.scheduler = UniPCMultistepScheduler.from_config(
+                self.pipeline.scheduler.config,
+                flow_shift=flow_shift
+            )
+
+            # Move to GPU
+            logger.info(f"Moving pipeline to {self.device}...")
+            self.pipeline = self.pipeline.to(self.device)
+
             # Enable memory optimizations
             if self.device == "cuda":
-                # Enable model offloading to save VRAM
+                logger.info("Enabling model CPU offloading...")
                 self.pipeline.enable_model_cpu_offload()
-                # Enable VAE slicing
-                if hasattr(self.pipeline, "enable_vae_slicing"):
-                    self.pipeline.enable_vae_slicing()
-                # Enable attention slicing
-                if hasattr(self.pipeline, "enable_attention_slicing"):
-                    self.pipeline.enable_attention_slicing(1)
 
-            # VAE should use float32 for better quality
-            if hasattr(self.pipeline, "vae"):
-                self.pipeline.vae.to(dtype=torch.float32)
-
-            logger.info("Pipeline loaded successfully")
+            logger.info("Pipeline loaded successfully!")
 
         except Exception as e:
-            logger.error(f"Error loading pipeline: {e}")
+            logger.error(f"Error loading pipeline: {e}", exc_info=True)
             raise
 
     def generate(
@@ -108,9 +183,9 @@ class SkyReelsGenerator:
 
         Args:
             prompt: Text prompt for generation
-            num_frames: Number of frames (97 or 193)
-            guidance_scale: Guidance scale (T2V: 8.0, I2V: 5.0, default: 6.0)
-            num_inference_steps: Number of inference steps
+            num_frames: Number of frames (97 for 540P, 121 for 720P recommended)
+            guidance_scale: Guidance scale (T2V: 6-8, I2V: 5-6)
+            num_inference_steps: Number of inference steps (default: 30)
             image_path: Path to input image (required for I2V)
             output_dir: Directory to save output video
             seed: Random seed for reproducibility
@@ -120,83 +195,79 @@ class SkyReelsGenerator:
         """
         try:
             logger.info(f"Generating video with prompt: '{prompt}'")
+            logger.info(
+                f"Parameters: frames={num_frames}, guidance={guidance_scale}, "
+                f"steps={num_inference_steps}, seed={seed}"
+            )
 
             # Validate inputs
             if self.model_type == "i2v" and not image_path:
                 raise ValueError("Image path is required for I2V mode")
 
-            # Prepare generation parameters
-            generator = torch.Generator(device=self.device)
+            # Prepare generator
+            generator = None
             if seed is not None:
+                generator = torch.Generator(device=self.device)
                 generator.manual_seed(seed)
 
-            # Adjust flow_shift based on model type
-            flow_shift = 8.0 if self.model_type == "t2v" else 5.0
+            # Calculate resolution
+            if self.resolution == "540P":
+                height, width = 544, 960
+                base_num_frames = 97
+            else:  # 720P
+                height, width = 720, 1280
+                base_num_frames = 121
 
-            # Prepare pipeline inputs
-            pipeline_inputs: Dict[str, Any] = {
+            # Adjust for 1.3B model (use smaller resolution if needed)
+            if self.model_size == "1.3B" and self.resolution == "720P":
+                logger.warning("1.3B model using 540P resolution as fallback")
+                height, width = 544, 960
+                base_num_frames = 97
+
+            # Prepare pipeline arguments
+            common_kwargs = {
                 "prompt": prompt,
+                "height": height,
+                "width": width,
                 "num_frames": num_frames,
                 "guidance_scale": guidance_scale,
                 "num_inference_steps": num_inference_steps,
-                "generator": generator,
             }
 
-            # Add flow_shift if supported
-            if hasattr(self.pipeline, "transformer") and hasattr(self.pipeline.transformer.config, "flow_shift"):
-                pipeline_inputs["flow_shift"] = flow_shift
+            if generator:
+                common_kwargs["generator"] = generator
 
-            # For I2V, add image input
-            if self.model_type == "i2v" and image_path:
-                image = Image.open(image_path).convert("RGB")
-                pipeline_inputs["image"] = image
+            # Generate based on model type
+            if self.model_type == "i2v":
+                logger.info(f"Loading image: {image_path}")
+                image = load_image(image_path)
 
-            # Generate video
-            logger.info(f"Starting generation with {num_frames} frames, {num_inference_steps} steps")
-            output = self.pipeline(**pipeline_inputs)
+                output = self.pipeline(
+                    image=image,
+                    **common_kwargs
+                ).frames[0]
 
-            # Extract frames
-            frames = output.frames[0]  # Get first (and only) video in batch
+            else:  # t2v or df
+                output = self.pipeline(
+                    **common_kwargs,
+                    base_num_frames=base_num_frames,
+                    ar_step=5,
+                    causal_block_size=5,
+                ).frames[0]
 
             # Save video
-            os.makedirs(output_dir, exist_ok=True)
-            output_path = os.path.join(output_dir, "output.mp4")
+            output_path = Path(output_dir) / "output.mp4"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            self._save_video(frames, output_path)
+            logger.info(f"Saving video to: {output_path}")
+            export_to_video(output, str(output_path), fps=24, quality=8)
 
-            logger.info(f"Video saved to: {output_path}")
-            return output_path
+            logger.info(f"Video generated successfully: {output_path}")
+            return str(output_path)
 
         except Exception as e:
-            logger.error(f"Error generating video: {e}")
+            logger.error(f"Error generating video: {e}", exc_info=True)
             raise
-
-    def _save_video(self, frames: list, output_path: str, fps: int = 24):
-        """
-        Save frames as MP4 video
-
-        Args:
-            frames: List of PIL Image frames
-            output_path: Output video path
-            fps: Frames per second
-        """
-        # Convert PIL images to numpy arrays
-        frame_arrays = [np.array(frame) for frame in frames]
-
-        # Get dimensions
-        height, width = frame_arrays[0].shape[:2]
-
-        # Initialize video writer
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
-        # Write frames
-        for frame in frame_arrays:
-            # Convert RGB to BGR for OpenCV
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            out.write(frame_bgr)
-
-        out.release()
 
     def generate_thumbnail(self, video_path: str, output_path: Optional[str] = None) -> str:
         """
@@ -211,8 +282,8 @@ class SkyReelsGenerator:
         """
         try:
             if output_path is None:
-                video_dir = os.path.dirname(video_path)
-                output_path = os.path.join(video_dir, "thumbnail.jpg")
+                video_dir = Path(video_path).parent
+                output_path = str(video_dir / "thumbnail.jpg")
 
             # Open video
             cap = cv2.VideoCapture(video_path)
@@ -224,21 +295,40 @@ class SkyReelsGenerator:
 
             # Save thumbnail
             cv2.imwrite(output_path, frame)
-
             cap.release()
 
             logger.info(f"Thumbnail saved to: {output_path}")
             return output_path
 
         except Exception as e:
-            logger.error(f"Error generating thumbnail: {e}")
+            logger.error(f"Error generating thumbnail: {e}", exc_info=True)
             raise
 
     def cleanup(self):
-        """Clean up resources"""
-        if self.pipeline is not None:
-            del self.pipeline
-            self.pipeline = None
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.info("Pipeline cleaned up")
+        """Clean up resources and free GPU memory"""
+        try:
+            if self.pipeline is not None:
+                logger.info("Cleaning up pipeline...")
+                del self.pipeline
+                self.pipeline = None
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    logger.info("GPU cache cleared")
+
+            logger.info("Cleanup completed")
+
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {e}")
+
+    def get_memory_usage(self) -> dict:
+        """Get current GPU memory usage"""
+        if not torch.cuda.is_available():
+            return {"available": False}
+
+        return {
+            "available": True,
+            "allocated_gb": torch.cuda.memory_allocated() / 1024**3,
+            "reserved_gb": torch.cuda.memory_reserved() / 1024**3,
+            "max_allocated_gb": torch.cuda.max_memory_allocated() / 1024**3,
+        }

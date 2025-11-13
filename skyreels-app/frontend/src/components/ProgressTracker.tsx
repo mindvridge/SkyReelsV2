@@ -84,6 +84,9 @@ export const ProgressTracker: React.FC = () => {
                 <span className="font-medium">Model:</span> {video.model_type.toUpperCase()}
               </div>
               <div>
+                <span className="font-medium">Size:</span> {video.model_size}
+              </div>
+              <div>
                 <span className="font-medium">Resolution:</span> {video.resolution}
               </div>
               <div>
