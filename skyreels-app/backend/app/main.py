@@ -45,6 +45,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
 
+    # Initialize WebSocket security
+    try:
+        from app.api.websocket_security import configure_security
+        configure_security(
+            allowed_origins=settings.CORS_ORIGINS,
+            max_connections_per_ip=settings.WS_MAX_CONNECTIONS_PER_IP,
+            max_connections_per_job=settings.WS_MAX_CONNECTIONS_PER_JOB,
+        )
+        logger.info("WebSocket security configured")
+    except Exception as e:
+        logger.error(f"Failed to configure WebSocket security: {e}")
+
     yield
 
     # Shutdown
@@ -111,6 +123,7 @@ async def api_root():
             "list": "/api/v1/videos/list",
             "delete": "/api/v1/videos/{job_id}",
             "websocket": "ws://<host>/ws/progress/{job_id}",
+            "websocket_stats": "/ws/stats",
         },
     }
 

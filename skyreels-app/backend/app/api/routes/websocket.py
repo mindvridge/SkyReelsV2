@@ -2,15 +2,18 @@
 WebSocket routes for real-time updates
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from typing import Dict, List
 import asyncio
 import json
 import logging
 from sqlalchemy.orm import Session
 from app.models.database import get_db, Video
+from app.api.websocket_security import security_manager
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 router = APIRouter()
 
@@ -80,6 +83,12 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
     """
     WebSocket endpoint for real-time video generation progress updates
 
+    Security Features:
+    - Origin validation
+    - Rate limiting per IP
+    - Connection limits per IP and job
+    - Automatic cleanup on disconnect
+
     Args:
         websocket: WebSocket connection
         job_id: Video generation job ID
@@ -95,6 +104,20 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
             }
         }
     """
+    # Validate connection against security policies
+    is_valid, error_message, client_ip = await security_manager.validate_connection(
+        websocket, job_id, check_origin=settings.WS_CHECK_ORIGIN
+    )
+
+    if not is_valid:
+        logger.warning(f"[WebSocket Security] Connection rejected for {client_ip}: {error_message}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=error_message)
+        return
+
+    # Register connection with security manager
+    security_manager.register_connection(client_ip, job_id)
+
+    # Accept WebSocket connection
     await manager.connect(websocket, job_id)
 
     try:
@@ -183,7 +206,9 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
     except Exception as e:
         logger.error(f"[WebSocket] Error in progress endpoint: {e}")
     finally:
+        # Cleanup connections
         manager.disconnect(websocket, job_id)
+        security_manager.unregister_connection(client_ip, job_id)
         db.close()
 
 
@@ -204,3 +229,32 @@ async def broadcast_progress_update(job_id: str, video_data: dict):
 
     await manager.broadcast(job_id, message)
     logger.info(f"[WebSocket] Broadcasted progress update to {manager.get_connection_count(job_id)} clients for job {job_id}")
+
+
+@router.get("/ws/stats")
+async def websocket_stats():
+    """
+    Get WebSocket security and connection statistics
+
+    Returns:
+        dict: Statistics including connection counts, rate limits, etc.
+    """
+    security_stats = security_manager.get_stats()
+    connection_stats = {
+        "active_jobs": len(manager.active_connections),
+        "total_active_connections": sum(len(conns) for conns in manager.active_connections.values()),
+        "connections_by_job": {
+            job_id: len(conns) for job_id, conns in manager.active_connections.items()
+        }
+    }
+
+    return {
+        "security": security_stats,
+        "connections": connection_stats,
+        "limits": {
+            "max_connections_per_ip": settings.WS_MAX_CONNECTIONS_PER_IP,
+            "max_connections_per_job": settings.WS_MAX_CONNECTIONS_PER_JOB,
+            "rate_limit_window": settings.WS_RATE_LIMIT_WINDOW,
+            "rate_limit_max_attempts": settings.WS_RATE_LIMIT_MAX_ATTEMPTS,
+        }
+    }

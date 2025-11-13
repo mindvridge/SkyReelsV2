@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:80"]
 
+    # WebSocket Security
+    WS_MAX_CONNECTIONS_PER_IP: int = 5
+    WS_MAX_CONNECTIONS_PER_JOB: int = 10
+    WS_RATE_LIMIT_WINDOW: int = 60  # seconds
+    WS_RATE_LIMIT_MAX_ATTEMPTS: int = 20
+    WS_CHECK_ORIGIN: bool = True  # Set to False for development
+
     # Pagination
     DEFAULT_PAGE_SIZE: int = 10
     MAX_PAGE_SIZE: int = 100
