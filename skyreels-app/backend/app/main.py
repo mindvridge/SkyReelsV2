@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.models.database import init_db
-from app.api.routes import videos, health
+from app.api.routes import videos, health, upload
 from app.api.middleware import (
     add_cors_middleware,
     LoggingMiddleware,
@@ -69,6 +69,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 # Include routers
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(videos.router, prefix="/api/v1")
+app.include_router(upload.router, prefix="/api/v1")
 
 # Serve static files (for local storage)
 try:

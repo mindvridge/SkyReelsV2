@@ -1,8 +1,8 @@
 /**
- * Video generation form component
+ * Video generation form component with presets, history, and image upload
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useVideoStore } from '@/store/videoStore';
 import { useVideoGeneration } from '@/hooks/useVideoGeneration';
 import { Button } from '@/components/ui/Button';
@@ -10,26 +10,44 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Label } from '@/components/ui/Label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { ImageUploader } from '@/components/ImageUploader';
+import { ChevronDown, ChevronUp, Sparkles, Save, Clock, Trash2 } from 'lucide-react';
 import type { VideoCreateRequest } from '@/types/video';
+import { getAllPresets, getPresetById, savePreset, deletePreset, type VideoPreset } from '@/lib/presets';
+import { getPromptHistory, addToPromptHistory, removeFromPromptHistory } from '@/lib/promptHistory';
+import toast from 'react-hot-toast';
 
 export const VideoGenerator: React.FC = () => {
   const { form, setForm, resetForm, setCurrentJobId } = useVideoStore();
   const { generateVideo, isGenerating, data } = useVideoGeneration();
+
+  const [presets, setPresets] = useState(getAllPresets());
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [showSavePreset, setShowSavePreset] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [promptHistory, setPromptHistory] = useState(getPromptHistory());
+
+  // Reload history when form changes
+  useEffect(() => {
+    setPromptHistory(getPromptHistory());
+  }, [form.prompt]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     // Validate
     if (!form.prompt.trim()) {
-      alert('Please enter a prompt');
+      toast.error('Please enter a prompt');
       return;
     }
 
     if (form.modelType === 'i2v' && !form.imageUrl.trim()) {
-      alert('Please enter an image URL for Image-to-Video mode');
+      toast.error('Please provide an image for Image-to-Video mode');
       return;
     }
+
+    // Add to history
+    addToPromptHistory(form.prompt);
 
     // Create request
     const request: VideoCreateRequest = {
@@ -54,6 +72,92 @@ export const VideoGenerator: React.FC = () => {
     }
   }, [data, setCurrentJobId]);
 
+  // Load preset
+  const handleLoadPreset = (presetId: string) => {
+    if (!presetId) {
+      setSelectedPresetId('');
+      return;
+    }
+
+    const preset = getPresetById(presetId);
+    if (preset) {
+      setForm({
+        modelType: preset.modelType,
+        modelSize: preset.modelSize,
+        resolution: preset.resolution,
+        numFrames: preset.numFrames,
+        guidanceScale: preset.guidanceScale,
+        numInferenceSteps: preset.numInferenceSteps,
+      });
+      setSelectedPresetId(presetId);
+      toast.success(`Loaded preset: ${preset.name}`);
+    }
+  };
+
+  // Save current settings as preset
+  const handleSavePreset = () => {
+    if (!presetName.trim()) {
+      toast.error('Please enter a preset name');
+      return;
+    }
+
+    try {
+      const newPreset = savePreset({
+        name: presetName.trim(),
+        description: `Custom preset: ${form.modelSize} ${form.resolution}`,
+        modelType: form.modelType,
+        modelSize: form.modelSize,
+        resolution: form.resolution,
+        numFrames: form.numFrames,
+        guidanceScale: form.guidanceScale,
+        numInferenceSteps: form.numInferenceSteps,
+      });
+
+      setPresets(getAllPresets());
+      setPresetName('');
+      setShowSavePreset(false);
+      setSelectedPresetId(newPreset.id);
+      toast.success(`Preset saved: ${newPreset.name}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save preset');
+    }
+  };
+
+  // Delete preset
+  const handleDeletePreset = () => {
+    if (!selectedPresetId) return;
+
+    const preset = getPresetById(selectedPresetId);
+    if (preset?.isDefault) {
+      toast.error('Cannot delete default presets');
+      return;
+    }
+
+    if (confirm(`Delete preset "${preset?.name}"?`)) {
+      try {
+        deletePreset(selectedPresetId);
+        setPresets(getAllPresets());
+        setSelectedPresetId('');
+        toast.success('Preset deleted');
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to delete preset');
+      }
+    }
+  };
+
+  // Load prompt from history
+  const handleLoadPrompt = (prompt: string) => {
+    setForm({ prompt });
+  };
+
+  // Remove from history
+  const handleRemoveFromHistory = (e: React.MouseEvent, prompt: string) => {
+    e.stopPropagation();
+    removeFromPromptHistory(prompt);
+    setPromptHistory(getPromptHistory());
+    toast.success('Removed from history');
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -64,7 +168,43 @@ export const VideoGenerator: React.FC = () => {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Prompt */}
+          {/* Presets */}
+          <div className="space-y-2">
+            <Label htmlFor="preset">Quick Presets</Label>
+            <div className="flex gap-2">
+              <Select
+                id="preset"
+                value={selectedPresetId}
+                onChange={(e) => handleLoadPreset(e.target.value)}
+                className="flex-1"
+              >
+                <option value="">-- Select a preset --</option>
+                {presets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name} {preset.isDefault ? '' : '(Custom)'}
+                  </option>
+                ))}
+              </Select>
+              {selectedPresetId && !getPresetById(selectedPresetId)?.isDefault && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeletePreset}
+                  title="Delete preset"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            {selectedPresetId && (
+              <p className="text-xs text-gray-500">
+                {getPresetById(selectedPresetId)?.description}
+              </p>
+            )}
+          </div>
+
+          {/* Prompt with History */}
           <div className="space-y-2">
             <Label htmlFor="prompt">Prompt *</Label>
             <Input
@@ -76,9 +216,40 @@ export const VideoGenerator: React.FC = () => {
               required
               maxLength={1000}
             />
-            <p className="text-xs text-gray-500">
-              {form.prompt.length}/1000 characters
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                {form.prompt.length}/1000 characters
+              </p>
+              {promptHistory.length > 0 && (
+                <details className="relative">
+                  <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Recent prompts ({promptHistory.length})
+                  </summary>
+                  <div className="absolute right-0 mt-2 w-80 bg-white border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                    {promptHistory.map((item, index) => (
+                      <div
+                        key={index}
+                        className="p-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 group"
+                        onClick={() => handleLoadPrompt(item.prompt)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm text-gray-700 flex-1 line-clamp-2">
+                            {item.prompt}
+                          </p>
+                          <button
+                            onClick={(e) => handleRemoveFromHistory(e, item.prompt)}
+                            className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
           </div>
 
           {/* Model Type */}
@@ -94,6 +265,18 @@ export const VideoGenerator: React.FC = () => {
               <option value="df">Diffusion Forcing (DF) - Infinite Length</option>
             </Select>
           </div>
+
+          {/* Image Upload for I2V */}
+          {form.modelType === 'i2v' && (
+            <div className="space-y-2">
+              <Label>Input Image *</Label>
+              <ImageUploader
+                onUpload={(url) => setForm({ imageUrl: url })}
+                currentImage={form.imageUrl}
+                onClear={() => setForm({ imageUrl: '' })}
+              />
+            </div>
+          )}
 
           {/* Model Size */}
           <div className="space-y-2">
@@ -112,21 +295,6 @@ export const VideoGenerator: React.FC = () => {
                 : '1.3B model works on RTX 3090/4090 (24GB VRAM)'}
             </p>
           </div>
-
-          {/* Image URL for I2V */}
-          {form.modelType === 'i2v' && (
-            <div className="space-y-2">
-              <Label htmlFor="imageUrl">Image URL *</Label>
-              <Input
-                id="imageUrl"
-                type="url"
-                placeholder="https://example.com/image.jpg"
-                value={form.imageUrl}
-                onChange={(e) => setForm({ imageUrl: e.target.value })}
-                required
-              />
-            </div>
-          )}
 
           {/* Resolution */}
           <div className="space-y-2">
@@ -158,6 +326,49 @@ export const VideoGenerator: React.FC = () => {
 
             {form.showAdvanced && (
               <div className="mt-4 space-y-4">
+                {/* Save Preset Button */}
+                <div>
+                  {!showSavePreset ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowSavePreset(true)}
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Current Settings as Preset
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Preset name..."
+                        value={presetName}
+                        onChange={(e) => setPresetName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSavePreset();
+                          }
+                        }}
+                      />
+                      <Button type="button" size="sm" onClick={handleSavePreset}>
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowSavePreset(false);
+                          setPresetName('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Number of Frames */}
                 <div className="space-y-2">
                   <Label htmlFor="numFrames">

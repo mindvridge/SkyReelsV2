@@ -54,6 +54,7 @@ dist-ssr/
 storage/
 /models/
 !/backend/app/models/
+!/frontend/src/lib/
 
 # Database
 *.db
