@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ModelType } from '../types/video';
+import { ModelType } from '@/types/video';
 import {
   PROMPT_TEMPLATES,
   KEYWORD_CATEGORIES,
@@ -13,7 +13,7 @@ import {
   getAllCategories,
   validatePrompt,
   applyTemplate,
-} from '../lib/promptTemplates';
+} from '@/lib/promptTemplates';
 
 interface AdvancedPromptEditorProps {
   value: string;

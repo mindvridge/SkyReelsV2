@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Progress } from '@/components/ui/Progress';
 import { Button } from '@/components/ui/Button';
 import { getStatusColor, getStatusText } from '@/lib/utils';
+import { notifyVideoComplete, notifyVideoFailed } from '@/store/notificationStore';
 import { Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -20,10 +21,12 @@ export const ProgressTracker: React.FC = () => {
     enabled: !!currentJobId,
     onComplete: (video) => {
       toast.success('Video generation completed!');
+      notifyVideoComplete(video.prompt || 'Your video');
       setSelectedVideo(video);
     },
     onError: (video) => {
       toast.error(`Video generation failed: ${video.error_message}`);
+      notifyVideoFailed(video.prompt || 'Your video', video.error_message);
     },
   });
 

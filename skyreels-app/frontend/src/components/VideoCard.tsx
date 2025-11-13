@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { Video } from '../types/video';
-import { formatDate, getStatusColor, getStatusText } from '../lib/utils';
+import { Video } from '@/types/video';
+import { formatDate, getStatusColor, getStatusText } from '@/lib/utils';
 
 interface VideoCardProps {
   video: Video;
@@ -44,7 +44,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
     if (video.video_url) {
       return video.video_url.startsWith('http')
         ? video.video_url
-        : `http://localhost:8000${video.video_url}`;
+        : `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${video.video_url}`;
     }
     return '';
   };

@@ -6,8 +6,8 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Video, ModelType, VideoStatus } from '../types/video';
-import { VideoCard } from './VideoCard';
+import { Video, ModelType, VideoStatus } from '@/types/video';
+import { VideoCard } from '@/components/VideoCard';
 import toast from 'react-hot-toast';
 
 type SortOption = 'newest' | 'oldest' | 'status' | 'model-type';
@@ -35,7 +35,7 @@ export const VideoGallery: React.FC = () => {
   const { data: videos = [], isLoading, error } = useQuery({
     queryKey: ['videos'],
     queryFn: async () => {
-      const response = await axios.get<Video[]>('http://localhost:8000/api/v1/videos');
+      const response = await axios.get<Video[]>('/api/v1/videos');
       return response.data;
     },
     refetchInterval: 5000, // Refresh every 5 seconds

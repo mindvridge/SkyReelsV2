@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { useNotificationStore } from '../store/notificationStore';
+import { useNotificationStore } from '@/store/notificationStore';
 import toast from 'react-hot-toast';
 
 export const NotificationSettings: React.FC = () => {
