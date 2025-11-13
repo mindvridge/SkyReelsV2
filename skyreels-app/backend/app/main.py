@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.models.database import init_db
-from app.api.routes import videos, health, upload
+from app.api.routes import videos, health, upload, websocket
 from app.api.middleware import (
     add_cors_middleware,
     LoggingMiddleware,
@@ -70,6 +70,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(videos.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
+app.include_router(websocket.router, tags=["websocket"])  # WebSocket doesn't need /api/v1 prefix
 
 # Serve static files (for local storage)
 try:
@@ -109,6 +110,7 @@ async def api_root():
             "status": "/api/v1/videos/status/{job_id}",
             "list": "/api/v1/videos/list",
             "delete": "/api/v1/videos/{job_id}",
+            "websocket": "ws://<host>/ws/progress/{job_id}",
         },
     }
 

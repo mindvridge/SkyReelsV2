@@ -76,7 +76,9 @@ def generate_video_task(self, job_id: str, params: dict):
         # Update status to processing
         video.status = "processing"
         video.progress = 0
+        video.updated_at = datetime.utcnow()
         db.commit()
+        logger.info(f"[Progress] Job {job_id}: 0% - Status set to processing")
 
         # Update task state
         self.update_state(
@@ -107,7 +109,9 @@ def generate_video_task(self, job_id: str, params: dict):
 
         # Update progress
         video.progress = 10
+        video.updated_at = datetime.utcnow()
         db.commit()
+        logger.info(f"[Progress] Job {job_id}: 10% - Model loaded")
         self.update_state(
             state="PROCESSING",
             meta={"progress": 10, "status": "Model loaded, starting generation..."}
@@ -123,6 +127,8 @@ def generate_video_task(self, job_id: str, params: dict):
         # Generate video
         logger.info("Starting video generation...")
         video.progress = 20
+        logger.info(f"[Progress] Job {job_id}: 20% - Starting generation")
+        video.updated_at = datetime.utcnow()
         db.commit()
         self.update_state(
             state="PROCESSING",
@@ -140,6 +146,8 @@ def generate_video_task(self, job_id: str, params: dict):
 
         # Update progress
         video.progress = 70
+        logger.info(f"[Progress] Job {job_id}: 70% - Video generated")
+        video.updated_at = datetime.utcnow()
         db.commit()
         self.update_state(
             state="PROCESSING",
@@ -151,6 +159,8 @@ def generate_video_task(self, job_id: str, params: dict):
 
         # Update progress
         video.progress = 80
+        logger.info(f"[Progress] Job {job_id}: 80% - Creating thumbnail")
+        video.updated_at = datetime.utcnow()
         db.commit()
         self.update_state(
             state="PROCESSING",
@@ -164,6 +174,8 @@ def generate_video_task(self, job_id: str, params: dict):
         # Update database
         video.status = "completed"
         video.progress = 100
+        logger.info(f"[Progress] Job {job_id}: 100% - Completed")
+        video.updated_at = datetime.utcnow()
         video.video_url = video_url
         video.thumbnail_url = thumbnail_url
         video.completed_at = datetime.utcnow()
