@@ -3,9 +3,9 @@
  * Grid view of all videos with filtering and sorting
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import api, { handleApiError } from '@/lib/axios';
 import { Video, ModelType, VideoStatus } from '@/types/video';
 import { VideoCard } from '@/components/VideoCard';
 import toast from 'react-hot-toast';
@@ -19,6 +19,8 @@ interface FilterState {
   search: string;
 }
 
+const ITEMS_PER_PAGE = 12; // Show 12 videos at a time
+
 export const VideoGallery: React.FC = () => {
   const queryClient = useQueryClient();
 
@@ -30,12 +32,16 @@ export const VideoGallery: React.FC = () => {
     search: '',
   });
   const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [displayedCount, setDisplayedCount] = useState(ITEMS_PER_PAGE);
+
+  // Ref for infinite scroll trigger
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Fetch all videos
   const { data: videos = [], isLoading, error } = useQuery({
     queryKey: ['videos'],
     queryFn: async () => {
-      const response = await axios.get<Video[]>('/api/v1/videos');
+      const response = await api.get<Video[]>('/api/v1/videos');
       return response.data;
     },
     refetchInterval: 5000, // Refresh every 5 seconds
@@ -97,7 +103,7 @@ export const VideoGallery: React.FC = () => {
     }
 
     try {
-      await axios.delete(`http://localhost:8000/api/v1/videos/${videoId}`);
+      await api.delete(`/api/v1/videos/${videoId}`);
       queryClient.invalidateQueries({ queryKey: ['videos'] });
       toast.success('Video deleted successfully');
     } catch (error) {

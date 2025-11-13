@@ -16,7 +16,7 @@ import toast from 'react-hot-toast';
 export const ProgressTracker: React.FC = () => {
   const { currentJobId, setCurrentJobId, setSelectedVideo } = useVideoStore();
 
-  const { video, isLoading } = useVideoStatus({
+  const { video, isLoading, isUsingWebSocket } = useVideoStatus({
     jobId: currentJobId,
     enabled: !!currentJobId,
     onComplete: (video) => {
@@ -54,10 +54,19 @@ export const ProgressTracker: React.FC = () => {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          {getStatusIcon()}
-          Generation Progress
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            {getStatusIcon()}
+            Generation Progress
+          </CardTitle>
+          {/* WebSocket Connection Indicator */}
+          {isUsingWebSocket && (
+            <div className="flex items-center gap-1 text-xs text-green-600">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span>Live</span>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (

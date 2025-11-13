@@ -2,18 +2,24 @@
  * Main application component
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { VideoGenerator } from '@/components/VideoGenerator';
 import { ProgressTracker } from '@/components/ProgressTracker';
 import { VideoGallery } from '@/components/VideoGallery';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { useVideoStore } from '@/store/videoStore';
+import { setupNetworkMonitoring } from '@/lib/axios';
 import { Sparkles, Settings } from 'lucide-react';
 
 function App() {
   const { currentJobId } = useVideoStore();
   const [showSettings, setShowSettings] = useState(false);
+
+  // Setup network monitoring on mount
+  useEffect(() => {
+    setupNetworkMonitoring();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">

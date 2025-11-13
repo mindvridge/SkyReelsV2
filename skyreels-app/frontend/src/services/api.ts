@@ -2,7 +2,8 @@
  * API client for SkyReels V2 backend
  */
 
-import axios, { AxiosInstance } from 'axios';
+import api, { handleApiError } from '@/lib/axios';
+import { AxiosError } from 'axios';
 import type {
   VideoCreateRequest,
   Video,
@@ -13,72 +14,59 @@ import type {
   VideoStatus,
 } from '@/types/video';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
 class ApiClient {
-  private client: AxiosInstance;
-
-  constructor(baseURL: string) {
-    this.client = axios.create({
-      baseURL: `${baseURL}/api/v1`,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000, // 30 seconds
-    });
-
-    // Response interceptor for error handling
-    this.client.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response) {
-          // Server responded with error status
-          const message = error.response.data?.detail || error.message;
-          console.error('API Error:', message);
-          throw new Error(message);
-        } else if (error.request) {
-          // Request made but no response
-          console.error('Network Error:', error.message);
-          throw new Error('Network error. Please check your connection.');
-        } else {
-          // Something else happened
-          console.error('Error:', error.message);
-          throw error;
-        }
-      }
-    );
+  /**
+   * Wrapper to handle API errors consistently
+   */
+  private async handleRequest<T>(request: Promise<any>, context?: string): Promise<T> {
+    try {
+      const response = await request;
+      return response.data;
+    } catch (error) {
+      const errorMessage = handleApiError(error as AxiosError, context);
+      console.error(context || 'API Error:', errorMessage);
+      throw new Error(errorMessage);
+    }
   }
 
   /**
    * Health check
    */
   async health(): Promise<HealthResponse> {
-    const response = await this.client.get<HealthResponse>('/health');
-    return response.data;
+    return this.handleRequest<HealthResponse>(
+      api.get('/api/v1/health'),
+      'Health check failed'
+    );
   }
 
   /**
    * Create a new video generation job
    */
   async createVideo(data: VideoCreateRequest): Promise<JobCreatedResponse> {
-    const response = await this.client.post<JobCreatedResponse>('/videos/generate', data);
-    return response.data;
+    return this.handleRequest<JobCreatedResponse>(
+      api.post('/api/v1/videos/generate', data),
+      'Failed to create video'
+    );
   }
 
   /**
    * Get video status by job ID
    */
   async getVideoStatus(jobId: string): Promise<Video> {
-    const response = await this.client.get<Video>(`/videos/status/${jobId}`);
-    return response.data;
+    return this.handleRequest<Video>(
+      api.get(`/api/v1/videos/status/${jobId}`),
+      'Failed to get video status'
+    );
   }
 
   /**
    * Get video details by job ID
    */
   async getVideo(jobId: string): Promise<Video> {
-    const response = await this.client.get<Video>(`/videos/${jobId}`);
-    return response.data;
+    return this.handleRequest<Video>(
+      api.get(`/api/v1/videos/${jobId}`),
+      'Failed to get video'
+    );
   }
 
   /**
@@ -90,21 +78,25 @@ class ApiClient {
       params.status = status;
     }
 
-    const response = await this.client.get<VideoListResponse>('/videos/list', { params });
-    return response.data;
+    return this.handleRequest<VideoListResponse>(
+      api.get('/api/v1/videos/list', { params }),
+      'Failed to list videos'
+    );
   }
 
   /**
    * Delete a video by job ID
    */
   async deleteVideo(jobId: string): Promise<MessageResponse> {
-    const response = await this.client.delete<MessageResponse>(`/videos/${jobId}`);
-    return response.data;
+    return this.handleRequest<MessageResponse>(
+      api.delete(`/api/v1/videos/${jobId}`),
+      'Failed to delete video'
+    );
   }
 }
 
 // Create singleton instance
-export const apiClient = new ApiClient(API_BASE_URL);
+export const apiClient = new ApiClient();
 
 // Export individual functions for convenience
 export const {
