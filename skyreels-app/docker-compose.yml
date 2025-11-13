@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: skyreels-postgres
+    environment:
+      POSTGRES_USER: skyreels
+      POSTGRES_PASSWORD: skyreels
+      POSTGRES_DB: skyreels
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skyreels"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - skyreels-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: skyreels-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - skyreels-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skyreels-backend
+    environment:
+      - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/storage
+      - SKYREELS_MODEL_CACHE=/models
+      - DEFAULT_RESOLUTION=540P
+      - CORS_ORIGINS=["http://localhost:3000", "http://localhost:80", "http://localhost"]
+    volumes:
+      - ./backend:/app
+      - storage_data:/app/storage
+      - model_cache:/models
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - skyreels-network
+
+  # Celery Worker (with GPU support)
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: skyreels-celery-worker
+    command: celery -A app.services.queue worker --loglevel=info --concurrency=1
+    environment:
+      - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/storage
+      - SKYREELS_MODEL_CACHE=/models
+      - DEFAULT_RESOLUTION=540P
+    volumes:
+      - ./backend:/app
+      - storage_data:/app/storage
+      - model_cache:/models
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - skyreels-network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: skyreels-frontend
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - skyreels-network
+
+  # Nginx Reverse Proxy (optional, for production)
+  nginx:
+    image: nginx:alpine
+    container_name: skyreels-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - skyreels-network
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  redis_data:
+  storage_data:
+  model_cache:
+
+networks:
+  skyreels-network:
+    driver: bridge
