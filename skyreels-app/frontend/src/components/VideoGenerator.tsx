@@ -11,10 +11,12 @@ import { Select } from '@/components/ui/Select';
 import { Label } from '@/components/ui/Label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { ImageUploader } from '@/components/ImageUploader';
+import { AdvancedPromptEditor } from '@/components/AdvancedPromptEditor';
 import { ChevronDown, ChevronUp, Sparkles, Save, Clock, Trash2 } from 'lucide-react';
 import type { VideoCreateRequest } from '@/types/video';
 import { getAllPresets, getPresetById, savePreset, deletePreset, type VideoPreset } from '@/lib/presets';
 import { getPromptHistory, addToPromptHistory, removeFromPromptHistory } from '@/lib/promptHistory';
+import { estimateCompletionTime, formatEstimatedTime } from '@/store/notificationStore';
 import toast from 'react-hot-toast';
 
 export const VideoGenerator: React.FC = () => {
@@ -26,6 +28,16 @@ export const VideoGenerator: React.FC = () => {
   const [showSavePreset, setShowSavePreset] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [promptHistory, setPromptHistory] = useState(getPromptHistory());
+  const [useAdvancedEditor, setUseAdvancedEditor] = useState(false);
+
+  // Calculate estimated completion time
+  const estimatedTime = estimateCompletionTime(
+    form.modelType,
+    form.modelSize,
+    form.resolution,
+    form.numFrames,
+    form.numInferenceSteps
+  );
 
   // Reload history when form changes
   useEffect(() => {
@@ -204,52 +216,73 @@ export const VideoGenerator: React.FC = () => {
             )}
           </div>
 
-          {/* Prompt with History */}
+          {/* Prompt with Advanced Editor */}
           <div className="space-y-2">
-            <Label htmlFor="prompt">Prompt *</Label>
-            <Input
-              id="prompt"
-              type="text"
-              placeholder="Describe the video you want to generate..."
-              value={form.prompt}
-              onChange={(e) => setForm({ prompt: e.target.value })}
-              required
-              maxLength={1000}
-            />
             <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500">
-                {form.prompt.length}/1000 characters
-              </p>
-              {promptHistory.length > 0 && (
-                <details className="relative">
-                  <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    Recent prompts ({promptHistory.length})
-                  </summary>
-                  <div className="absolute right-0 mt-2 w-80 bg-white border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-                    {promptHistory.map((item, index) => (
-                      <div
-                        key={index}
-                        className="p-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 group"
-                        onClick={() => handleLoadPrompt(item.prompt)}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm text-gray-700 flex-1 line-clamp-2">
-                            {item.prompt}
-                          </p>
-                          <button
-                            onClick={(e) => handleRemoveFromHistory(e, item.prompt)}
-                            className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              )}
+              <Label htmlFor="prompt">Prompt *</Label>
+              <button
+                type="button"
+                onClick={() => setUseAdvancedEditor(!useAdvancedEditor)}
+                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              >
+                {useAdvancedEditor ? 'Simple Editor' : 'Advanced Editor'}
+                <ChevronDown className={`h-3 w-3 transform transition-transform ${useAdvancedEditor ? 'rotate-180' : ''}`} />
+              </button>
             </div>
+
+            {useAdvancedEditor ? (
+              <AdvancedPromptEditor
+                value={form.prompt}
+                onChange={(prompt) => setForm({ prompt })}
+                modelType={form.modelType}
+              />
+            ) : (
+              <>
+                <Input
+                  id="prompt"
+                  type="text"
+                  placeholder="Describe the video you want to generate..."
+                  value={form.prompt}
+                  onChange={(e) => setForm({ prompt: e.target.value })}
+                  required
+                  maxLength={1000}
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">
+                    {form.prompt.length}/1000 characters
+                  </p>
+                  {promptHistory.length > 0 && (
+                    <details className="relative">
+                      <summary className="cursor-pointer text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Recent prompts ({promptHistory.length})
+                      </summary>
+                      <div className="absolute right-0 mt-2 w-80 bg-white border rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
+                        {promptHistory.map((item, index) => (
+                          <div
+                            key={index}
+                            className="p-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 group"
+                            onClick={() => handleLoadPrompt(item.prompt)}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm text-gray-700 flex-1 line-clamp-2">
+                                {item.prompt}
+                              </p>
+                              <button
+                                onClick={(e) => handleRemoveFromHistory(e, item.prompt)}
+                                className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Model Type */}
@@ -431,6 +464,16 @@ export const VideoGenerator: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Estimated Time */}
+          {!isGenerating && (
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-600 bg-blue-50 rounded-lg p-3">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <span>
+                Estimated generation time: <strong className="text-blue-700">{formatEstimatedTime(estimatedTime)}</strong>
+              </span>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-2">
