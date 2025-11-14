@@ -10,16 +10,60 @@ import { VideoPlayer } from '@/components/VideoPlayer';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { useVideoStore } from '@/store/videoStore';
 import { setupNetworkMonitoring } from '@/lib/axios';
-import { Sparkles, Settings } from 'lucide-react';
+import { Sparkles, Settings, StopCircle } from 'lucide-react';
+import { cancelAllVideos } from '@/services/api';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { listVideos } from '@/services/api';
+import toast from 'react-hot-toast';
 
 function App() {
-  const { currentJobId } = useVideoStore();
+  const { currentJobId, setCurrentJobId } = useVideoStore();
   const [showSettings, setShowSettings] = useState(false);
+  const [isCancellingAll, setIsCancellingAll] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Check for active jobs
+  const { data: videosData } = useQuery({
+    queryKey: ['videos'],
+    queryFn: async () => {
+      const firstPage = await listVideos(1, 100);
+      return firstPage.videos || [];
+    },
+    refetchInterval: 5000, // Check every 5 seconds
+  });
+
+  const activeJobsCount = (videosData || []).filter(
+    (v) => v.status === 'queued' || v.status === 'processing'
+  ).length;
 
   // Setup network monitoring on mount
   useEffect(() => {
     setupNetworkMonitoring();
   }, []);
+
+  const handleCancelAll = async () => {
+    if (activeJobsCount === 0) {
+      toast('취소할 진행 중인 작업이 없습니다', { icon: 'ℹ️' });
+      return;
+    }
+
+    if (!confirm(`진행 중인 ${activeJobsCount}개의 영상 생성을 모두 취소하시겠습니까?`)) {
+      return;
+    }
+
+    setIsCancellingAll(true);
+    try {
+      const response = await cancelAllVideos();
+      toast.success(response.message || '모든 진행 중인 작업이 취소되었습니다');
+      // Refresh video list and clear current job
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+      setCurrentJobId(null);
+    } catch (error: any) {
+      toast.error(`전체 취소 실패: ${error.message}`);
+    } finally {
+      setIsCancellingAll(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -34,17 +78,35 @@ function App() {
                   SkyReels V2
                 </h1>
                 <p className="text-sm text-gray-500">
-                  AI-Powered Video Generation
+                  AI 기반 비디오 생성
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-            >
-              <Settings className="h-5 w-5 text-gray-700" />
-              <span className="text-sm font-medium text-gray-700">Settings</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {activeJobsCount > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-lg text-xs font-medium">
+                  {activeJobsCount}개 진행 중
+                </div>
+              )}
+              <button
+                onClick={handleCancelAll}
+                disabled={isCancellingAll || activeJobsCount === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={activeJobsCount === 0 ? '진행 중인 작업이 없습니다' : '모든 진행 중인 영상 생성 취소'}
+              >
+                <StopCircle className="h-5 w-5" />
+                <span className="text-sm font-medium">
+                  {isCancellingAll ? '취소 중...' : '전체 멈추기'}
+                </span>
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <Settings className="h-5 w-5 text-gray-700" />
+                <span className="text-sm font-medium text-gray-700">설정</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -76,7 +138,7 @@ function App() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Settings</h2>
+              <h2 className="text-xl font-bold text-gray-900">설정</h2>
               <button
                 onClick={() => setShowSettings(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -106,7 +168,7 @@ function App() {
             >
               SkyReels V2
             </a>
-            {' '}• World's First Open-Source Infinite-Length Video Generation Model
+            {' '}• 세계 최초 오픈소스 무한 길이 비디오 생성 모델
           </p>
         </div>
       </footer>

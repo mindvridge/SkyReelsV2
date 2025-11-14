@@ -34,27 +34,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
 };
 
 // Create notification sound
-let notificationSound: HTMLAudioElement | null = null;
-
-const initializeSound = () => {
-  if (!notificationSound) {
-    // Using a simple notification sound (data URI for a beep sound)
-    notificationSound = new Audio();
-    // Simple beep tone
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-  }
-  return notificationSound;
-};
+// Note: Sound is generated dynamically in playSound() function
 
 export const useNotificationStore = create<NotificationState>()(
   persist(

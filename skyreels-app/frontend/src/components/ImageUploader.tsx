@@ -54,14 +54,14 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(file.type)) {
-      toast.error('Invalid file type. Please upload JPG, PNG, WebP, or GIF.');
+      toast.error('잘못된 파일 형식입니다. JPG, PNG, WebP 또는 GIF를 업로드해주세요.');
       return;
     }
 
     // Validate file size (10MB)
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast.error('File too large. Maximum size is 10MB.');
+      toast.error('파일이 너무 큽니다. 최대 크기는 10MB입니다.');
       return;
     }
 
@@ -80,10 +80,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       const { image_url, dimensions } = response.data;
 
       onUpload(image_url);
-      toast.success(`Image uploaded (${dimensions.width}x${dimensions.height})`);
+      toast.success(`이미지 업로드 완료 (${dimensions.width}x${dimensions.height})`);
     } catch (error: any) {
       console.error('Upload error:', error);
-      const message = error.response?.data?.detail || 'Failed to upload image';
+      const message = error.response?.data?.detail || '이미지 업로드에 실패했습니다';
       toast.error(message);
     } finally {
       setIsUploading(false);
@@ -156,10 +156,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
             <div>
               <p className="text-sm font-medium text-gray-900">
-                {isUploading ? 'Uploading...' : 'Drop your image here'}
+                {isUploading ? '업로드 중...' : '이미지를 여기에 드롭하세요'}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                or click the button below
+                또는 아래 버튼을 클릭하세요
               </p>
             </div>
 
@@ -170,7 +170,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               variant="outline"
             >
               <Upload className="h-4 w-4 mr-2" />
-              Choose Image
+              이미지 선택
             </Button>
 
             <p className="text-xs text-gray-500">

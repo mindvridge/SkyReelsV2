@@ -27,7 +27,7 @@ export function useVideoStatus({
   const callbacksCalledRef = useRef({ complete: false, error: false });
 
   // WebSocket connection for real-time updates
-  const { isConnected: wsConnected, progress: wsProgress } = useVideoProgressWebSocket(
+  const { isConnected: wsConnected } = useVideoProgressWebSocket(
     useWebSocket && enabled && jobId ? jobId : null,
     (data) => {
       // Handle WebSocket progress updates
@@ -47,13 +47,14 @@ export function useVideoStatus({
   );
 
   // Fallback to polling if WebSocket is disabled or not connected
-  const shouldPoll = enabled && jobId && (!useWebSocket || !wsConnected);
+  const shouldPoll = enabled && !!jobId && (!useWebSocket || !wsConnected);
 
-  const query = useQuery({
+  const query = useQuery<Video>({
     queryKey: ['video-status', jobId],
     queryFn: () => getVideoStatus(jobId!),
-    enabled: shouldPoll,
-    refetchInterval: (data) => {
+    enabled: shouldPoll as boolean,
+    refetchInterval: (query) => {
+      const data = query.state.data;
       // Stop polling if completed or failed
       if (!data || data.status === 'completed' || data.status === 'failed') {
         // Update current video from polling
@@ -79,7 +80,7 @@ export function useVideoStatus({
 
   // Update current video from query data if not using WebSocket
   useEffect(() => {
-    if (query.data && !wsConnected) {
+    if (query.data && !wsConnected && query.data.id) {
       setCurrentVideo(query.data);
     }
   }, [query.data, wsConnected]);

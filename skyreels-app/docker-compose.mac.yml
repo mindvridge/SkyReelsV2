@@ -4,27 +4,11 @@
 version: '3.8'
 
 services:
-  # Celery Worker - GPU 설정 제거 (macOS용)
-  celery-worker:
-    deploy:
-      resources:
-        limits:
-          cpus: '4'  # CPU 코어 제한
-          memory: 16G  # 메모리 제한
-        # GPU 설정 제거됨 - macOS는 NVIDIA GPU 미지원
-    environment:
-      - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - STORAGE_TYPE=local
-      - LOCAL_STORAGE_PATH=/app/storage
-      - SKYREELS_MODEL_CACHE=/models
-      - DEFAULT_RESOLUTION=540P
-      - PYTORCH_ENABLE_MPS_FALLBACK=1  # Apple Silicon MPS 폴백 활성화
-
-  # Backend - macOS 최적화
+  # Backend - macOS용 CPU Dockerfile 사용
   backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.mac  # macOS용 Dockerfile 사용
     environment:
       - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
       - REDIS_URL=redis://redis:6379/0
@@ -36,6 +20,38 @@ services:
       - DEFAULT_RESOLUTION=540P
       - CORS_ORIGINS=["http://localhost:3000", "http://localhost:80", "http://localhost"]
       - WS_CHECK_ORIGIN=false  # 개발 모드
+
+  # Celery Worker - GPU 설정 제거 (macOS용)
+  # deploy 섹션을 완전히 제거하여 GPU 요구사항 제거
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.mac  # macOS용 Dockerfile 사용
+    container_name: skyreels-celery-worker
+    command: celery -A app.services.queue worker --loglevel=info --concurrency=1
+    environment:
+      - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/storage
+      - SKYREELS_MODEL_CACHE=/models
+      - DEFAULT_RESOLUTION=540P
+      - PYTORCH_ENABLE_MPS_FALLBACK=1  # Apple Silicon MPS 폴백 활성화
+    volumes:
+      - ./backend:/app
+      - storage_data:/app/storage
+      - model_cache:/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - skyreels-network
 
   # Frontend - macOS 포트 설정
   frontend:

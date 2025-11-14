@@ -74,6 +74,7 @@ services:
       - skyreels-network
 
   # Celery Worker (with GPU support)
+  # Note: macOS에서는 docker-compose.mac.yml의 celery-worker를 사용하세요
   celery-worker:
     build:
       context: ./backend
@@ -106,6 +107,8 @@ services:
               capabilities: [gpu]
     networks:
       - skyreels-network
+    profiles:
+      - gpu  # GPU가 있는 환경에서만 활성화
 
   # React Frontend
   frontend:

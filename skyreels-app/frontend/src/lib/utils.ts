@@ -36,14 +36,14 @@ export function getStatusColor(status: string): string {
 export function getStatusText(status: string): string {
   switch (status) {
     case 'completed':
-      return 'Completed';
+      return '완료됨';
     case 'processing':
-      return 'Processing';
+      return '처리 중';
     case 'queued':
-      return 'Queued';
+      return '대기 중';
     case 'failed':
-      return 'Failed';
+      return '실패';
     default:
-      return 'Unknown';
+      return '알 수 없음';
   }
 }

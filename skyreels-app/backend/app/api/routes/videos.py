@@ -17,7 +17,7 @@ from app.models.schemas import (
     MessageResponse,
     VideoStatus,
 )
-from app.services.queue import generate_video_task
+from app.services.queue import generate_video_task, celery_app
 from app.services.storage import StorageService
 from app.config import get_settings, Settings
 
@@ -127,6 +127,7 @@ async def get_video_status(
             id=str(video.id),
             prompt=video.prompt,
             model_type=video.model_type,
+            model_size=video.model_size,
             resolution=video.resolution,
             num_frames=video.num_frames,
             guidance_scale=video.guidance_scale,
@@ -186,6 +187,7 @@ async def list_videos(
                 id=str(video.id),
                 prompt=video.prompt,
                 model_type=video.model_type,
+                model_size=video.model_size,
                 resolution=video.resolution,
                 num_frames=video.num_frames,
                 guidance_scale=video.guidance_scale,
@@ -262,6 +264,112 @@ async def delete_video(
     except Exception as e:
         logger.error(f"Error deleting video: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete video: {str(e)}")
+
+
+@router.post("/cancel-all", response_model=MessageResponse)
+async def cancel_all_videos(
+    db: Session = Depends(get_db),
+):
+    """
+    Cancel all active video generation jobs (queued or processing)
+
+    Returns:
+        Success message with count of cancelled jobs
+    """
+    try:
+        # Find all active jobs
+        active_videos = db.query(Video).filter(
+            Video.status.in_(["queued", "processing"])
+        ).all()
+
+        if not active_videos:
+            return MessageResponse(message="No active jobs to cancel")
+
+        cancelled_count = 0
+        errors = []
+
+        for video in active_videos:
+            try:
+                # Revoke Celery task
+                try:
+                    celery_app.control.revoke(str(video.id), terminate=True)
+                    logger.info(f"Revoked Celery task for job: {video.id}")
+                except Exception as e:
+                    logger.warning(f"Error revoking Celery task for {video.id}: {e}")
+
+                # Update database
+                video.status = "failed"
+                video.error_message = "Cancelled by user (bulk cancel)"
+                video.updated_at = datetime.utcnow()
+                cancelled_count += 1
+            except Exception as e:
+                logger.error(f"Error cancelling video {video.id}: {e}")
+                errors.append(str(video.id))
+
+        db.commit()
+
+        message = f"Successfully cancelled {cancelled_count} job(s)"
+        if errors:
+            message += f". Errors with {len(errors)} job(s): {', '.join(errors)}"
+
+        logger.info(f"Cancelled {cancelled_count} video job(s)")
+
+        return MessageResponse(message=message)
+
+    except Exception as e:
+        logger.error(f"Error cancelling all videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to cancel all videos: {str(e)}")
+
+
+@router.post("/{job_id}/cancel", response_model=MessageResponse)
+async def cancel_video(
+    job_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Cancel a video generation job
+
+    Args:
+        job_id: UUID of the video job
+
+    Returns:
+        Success message
+    """
+    try:
+        video = db.query(Video).filter(Video.id == job_id).first()
+
+        if not video:
+            raise HTTPException(status_code=404, detail="Video job not found")
+
+        # Only allow cancellation of queued or processing jobs
+        if video.status not in ["queued", "processing"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel job with status: {video.status}"
+            )
+
+        # Revoke Celery task
+        try:
+            celery_app.control.revoke(str(job_id), terminate=True)
+            logger.info(f"Revoked Celery task for job: {job_id}")
+        except Exception as e:
+            logger.warning(f"Error revoking Celery task: {e}")
+
+        # Update database
+        video.status = "failed"
+        video.error_message = "Cancelled by user"
+        video.updated_at = datetime.utcnow()
+        db.commit()
+
+        logger.info(f"Cancelled video job: {job_id}")
+
+        return MessageResponse(message="Video generation cancelled successfully")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling video: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to cancel video: {str(e)}")
 
 
 @router.get("/{job_id}", response_model=VideoResponse)

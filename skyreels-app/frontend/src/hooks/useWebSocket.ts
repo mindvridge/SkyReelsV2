@@ -37,7 +37,7 @@ export const useWebSocket = ({
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectCountRef = useRef(0);
   const shouldConnectRef = useRef(true);
 
@@ -155,7 +155,7 @@ export const useWebSocket = ({
  * Hook for video generation progress updates via WebSocket
  */
 export const useVideoProgressWebSocket = (jobId: string | null, onProgress?: (data: any) => void) => {
-  const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://localhost:8000'}/ws/progress/${jobId}`;
+  const wsUrl = `${(import.meta.env.VITE_WS_URL as string) || 'ws://localhost:8000'}/ws/progress/${jobId}`;
 
   const { isConnected, lastMessage } = useWebSocket({
     url: jobId ? wsUrl : '',

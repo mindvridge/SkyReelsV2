@@ -85,7 +85,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
           <div className="w-full h-full flex flex-col items-center justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
             <p className="text-white text-sm">
-              {video.status === 'queued' ? 'Queued...' : 'Processing...'}
+              {video.status === 'queued' ? '대기 중...' : '처리 중...'}
             </p>
             {video.progress !== undefined && video.progress > 0 && (
               <div className="w-3/4 bg-gray-700 rounded-full h-2 mt-2">
@@ -111,11 +111,11 @@ export const VideoCard: React.FC<VideoCardProps> = ({
                 d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <p className="text-red-500 text-sm">Generation Failed</p>
+            <p className="text-red-500 text-sm">생성 실패</p>
           </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <p className="text-gray-400 text-sm">No Preview Available</p>
+            <p className="text-gray-400 text-sm">미리보기 없음</p>
           </div>
         )}
 
@@ -145,7 +145,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
       <div className="p-4">
         {/* Prompt */}
         <p className="text-sm text-gray-800 mb-2 line-clamp-2 font-medium">
-          {video.prompt || 'No prompt provided'}
+          {video.prompt || '프롬프트 없음'}
         </p>
 
         {/* Metadata */}
@@ -230,7 +230,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
                 onClick={(e) => e.stopPropagation()}
                 className="flex-1 text-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
               >
-                Download
+                다운로드
               </a>
             )}
             {onDelete && (
@@ -241,7 +241,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
                 }}
                 className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
               >
-                Delete
+                삭제
               </button>
             )}
           </div>

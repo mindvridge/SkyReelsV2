@@ -37,25 +37,25 @@ export const NotificationSettings: React.FC = () => {
       body: 'This is how your notifications will look!',
     });
     store.playSound();
-    toast.success('Test notification sent!');
+    toast.success('테스트 알림이 전송되었습니다!');
   };
 
   const handleTestSound = () => {
     const store = useNotificationStore.getState();
     store.playSound();
-    toast.success('Test sound played!');
+    toast.success('테스트 소리가 재생되었습니다!');
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-bold text-gray-900">Notification Settings</h3>
+        <h3 className="text-xl font-bold text-gray-900">알림 설정</h3>
         <button
           onClick={handleTestNotification}
           disabled={!settings.enabled || permission !== 'granted'}
           className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >
-          Test Notification
+          알림 테스트
         </button>
       </div>
 
@@ -63,9 +63,9 @@ export const NotificationSettings: React.FC = () => {
         {/* Master Enable Switch */}
         <div className="flex items-center justify-between pb-4 border-b border-gray-200">
           <div>
-            <label className="text-sm font-medium text-gray-900">Enable Notifications</label>
+            <label className="text-sm font-medium text-gray-900">알림 활성화</label>
             <p className="text-xs text-gray-500 mt-1">
-              Turn all notifications on or off
+              모든 알림을 켜거나 끕니다
             </p>
           </div>
           <button
@@ -85,14 +85,14 @@ export const NotificationSettings: React.FC = () => {
         {/* Browser Notifications */}
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <label className="text-sm font-medium text-gray-900">Browser Notifications</label>
+            <label className="text-sm font-medium text-gray-900">브라우저 알림</label>
             <p className="text-xs text-gray-500 mt-1">
-              Show desktop notifications
+              데스크톱 알림 표시
               {permission === 'denied' && (
-                <span className="text-red-600 ml-1">(Permission denied)</span>
+                <span className="text-red-600 ml-1">(권한 거부됨)</span>
               )}
               {permission === 'default' && (
-                <span className="text-yellow-600 ml-1">(Permission not requested)</span>
+                <span className="text-yellow-600 ml-1">(권한 요청 안 됨)</span>
               )}
             </p>
           </div>
@@ -114,8 +114,8 @@ export const NotificationSettings: React.FC = () => {
         {/* Sound Notifications */}
         <div className="flex items-center justify-between">
           <div className="flex-1">
-            <label className="text-sm font-medium text-gray-900">Sound Notifications</label>
-            <p className="text-xs text-gray-500 mt-1">Play a sound when notifications appear</p>
+            <label className="text-sm font-medium text-gray-900">소리 알림</label>
+            <p className="text-xs text-gray-500 mt-1">알림이 표시될 때 소리 재생</p>
           </div>
           <button
             onClick={() => updateSettings({ soundNotifications: !settings.soundNotifications })}
@@ -136,7 +136,7 @@ export const NotificationSettings: React.FC = () => {
         {settings.soundNotifications && (
           <div>
             <label className="text-sm font-medium text-gray-900 block mb-2">
-              Sound Volume: {Math.round(settings.soundVolume * 100)}%
+              소리 볼륨: {Math.round(settings.soundVolume * 100)}%
             </label>
             <div className="flex items-center gap-3">
               <input
@@ -155,7 +155,7 @@ export const NotificationSettings: React.FC = () => {
                 disabled={!settings.enabled}
                 className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                Test
+                테스트
               </button>
             </div>
           </div>
@@ -164,9 +164,9 @@ export const NotificationSettings: React.FC = () => {
         {/* Notify on Complete */}
         <div className="flex items-center justify-between">
           <div>
-            <label className="text-sm font-medium text-gray-900">Notify on Completion</label>
+            <label className="text-sm font-medium text-gray-900">완료 시 알림</label>
             <p className="text-xs text-gray-500 mt-1">
-              Get notified when video generation completes
+              비디오 생성이 완료되면 알림 받기
             </p>
           </div>
           <button
@@ -187,9 +187,9 @@ export const NotificationSettings: React.FC = () => {
         {/* Notify on Fail */}
         <div className="flex items-center justify-between">
           <div>
-            <label className="text-sm font-medium text-gray-900">Notify on Failure</label>
+            <label className="text-sm font-medium text-gray-900">실패 시 알림</label>
             <p className="text-xs text-gray-500 mt-1">
-              Get notified when video generation fails
+              비디오 생성이 실패하면 알림 받기
             </p>
           </div>
           <button
@@ -212,15 +212,15 @@ export const NotificationSettings: React.FC = () => {
           <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-sm text-yellow-800 mb-3">
               {permission === 'denied'
-                ? 'Browser notifications are blocked. Please enable them in your browser settings.'
-                : 'Browser notifications require permission to work.'}
+                ? '브라우저 알림이 차단되었습니다. 브라우저 설정에서 활성화해주세요.'
+                : '브라우저 알림은 권한이 필요합니다.'}
             </p>
             {permission === 'default' && (
               <button
                 onClick={requestPermission}
                 className="px-4 py-2 bg-yellow-600 text-white text-sm rounded-md hover:bg-yellow-700 transition-colors"
               >
-                Request Permission
+                권한 요청
               </button>
             )}
           </div>
@@ -242,7 +242,7 @@ export const NotificationSettings: React.FC = () => {
                 />
               </svg>
               <p className="text-sm text-green-800">
-                Notifications are enabled and working!
+                알림이 활성화되어 작동 중입니다!
               </p>
             </div>
           </div>

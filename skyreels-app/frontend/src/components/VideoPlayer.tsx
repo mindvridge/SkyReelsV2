@@ -31,7 +31,7 @@ export const VideoPlayer: React.FC = () => {
         {/* Header */}
         <div className="flex items-start justify-between border-b p-4">
           <div className="flex-1">
-            <h2 className="text-xl font-semibold">Generated Video</h2>
+            <h2 className="text-xl font-semibold">생성된 비디오</h2>
             <p className="text-sm text-gray-500 mt-1">{selectedVideo.prompt}</p>
           </div>
           <button
@@ -51,7 +51,7 @@ export const VideoPlayer: React.FC = () => {
             loop
             className="w-full rounded-lg"
           >
-            Your browser does not support video playback.
+            브라우저가 비디오 재생을 지원하지 않습니다.
           </video>
         </div>
 
@@ -59,19 +59,19 @@ export const VideoPlayer: React.FC = () => {
         <div className="border-t p-4">
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="font-medium">Model:</span> {selectedVideo.model_type.toUpperCase()}
+              <span className="font-medium">모델:</span> {selectedVideo.model_type.toUpperCase()}
             </div>
             <div>
-              <span className="font-medium">Resolution:</span> {selectedVideo.resolution}
+              <span className="font-medium">해상도:</span> {selectedVideo.resolution}
             </div>
             <div>
-              <span className="font-medium">Frames:</span> {selectedVideo.num_frames}
+              <span className="font-medium">프레임:</span> {selectedVideo.num_frames}
             </div>
             <div>
-              <span className="font-medium">Guidance Scale:</span> {selectedVideo.guidance_scale}
+              <span className="font-medium">가이던스 스케일:</span> {selectedVideo.guidance_scale}
             </div>
             <div className="col-span-2">
-              <span className="font-medium">Created:</span> {formatDate(selectedVideo.created_at)}
+              <span className="font-medium">생성일:</span> {formatDate(selectedVideo.created_at)}
             </div>
           </div>
         </div>
@@ -80,10 +80,10 @@ export const VideoPlayer: React.FC = () => {
         <div className="flex gap-2 border-t p-4">
           <Button onClick={handleDownload} className="flex items-center gap-2">
             <Download className="h-4 w-4" />
-            Download
+            다운로드
           </Button>
           <Button variant="outline" onClick={handleClose}>
-            Close
+            닫기
           </Button>
         </div>
       </div>

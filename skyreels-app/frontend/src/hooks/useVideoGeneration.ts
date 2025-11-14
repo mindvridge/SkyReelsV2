@@ -12,7 +12,7 @@ export function useVideoGeneration() {
 
   const mutation = useMutation({
     mutationFn: (data: VideoCreateRequest) => createVideo(data),
-    onSuccess: (data: JobCreatedResponse) => {
+    onSuccess: (_data: JobCreatedResponse) => {
       toast.success('Video generation started!');
       // Invalidate videos list to refetch
       queryClient.invalidateQueries({ queryKey: ['videos'] });

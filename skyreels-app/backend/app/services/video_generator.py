@@ -44,12 +44,27 @@ class SkyReelsGenerator:
         self.model_size = model_size
         self.model_cache_dir = model_cache_dir
         self.pipeline = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        # Device detection: CUDA > MPS > CPU
+        # Note: Docker 컨테이너 내부에서는 MPS를 사용할 수 없으므로 CPU만 사용됩니다
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            self.device = "mps"  # Apple Silicon GPU (Docker에서는 사용 불가)
+        else:
+            self.device = "cpu"  # macOS Docker에서는 CPU만 사용 (시스템 RAM 사용)
 
         logger.info(
             f"Initializing SkyReels generator: "
             f"type={model_type}, size={model_size}, res={resolution}, device={self.device}"
         )
+        
+        if self.device == "cpu":
+            logger.warning(
+                "⚠️  CPU 모드로 실행 중입니다. "
+                "Docker 컨테이너 내부에서는 macOS GPU(Metal)를 사용할 수 없으므로 "
+                "시스템 RAM을 사용하며 매우 느립니다."
+            )
 
         # Model mapping: {model_type: {model_size: {resolution: model_id}}}
         self.model_mapping = {

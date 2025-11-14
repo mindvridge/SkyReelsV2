@@ -85,6 +85,26 @@ class ApiClient {
   }
 
   /**
+   * Cancel a video generation job
+   */
+  async cancelVideo(jobId: string): Promise<MessageResponse> {
+    return this.handleRequest<MessageResponse>(
+      api.post(`/api/v1/videos/${jobId}/cancel`),
+      'Failed to cancel video'
+    );
+  }
+
+  /**
+   * Cancel all active video generation jobs
+   */
+  async cancelAllVideos(): Promise<MessageResponse> {
+    return this.handleRequest<MessageResponse>(
+      api.post('/api/v1/videos/cancel-all'),
+      'Failed to cancel all videos'
+    );
+  }
+
+  /**
    * Delete a video by job ID
    */
   async deleteVideo(jobId: string): Promise<MessageResponse> {
@@ -98,12 +118,12 @@ class ApiClient {
 // Create singleton instance
 export const apiClient = new ApiClient();
 
-// Export individual functions for convenience
-export const {
-  health,
-  createVideo,
-  getVideoStatus,
-  getVideo,
-  listVideos,
-  deleteVideo,
-} = apiClient;
+// Export individual functions for convenience (bind to preserve 'this' context)
+export const health = apiClient.health.bind(apiClient);
+export const createVideo = apiClient.createVideo.bind(apiClient);
+export const getVideoStatus = apiClient.getVideoStatus.bind(apiClient);
+export const getVideo = apiClient.getVideo.bind(apiClient);
+export const listVideos = apiClient.listVideos.bind(apiClient);
+export const cancelVideo = apiClient.cancelVideo.bind(apiClient);
+export const cancelAllVideos = apiClient.cancelAllVideos.bind(apiClient);
+export const deleteVideo = apiClient.deleteVideo.bind(apiClient);

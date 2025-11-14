@@ -32,17 +32,44 @@ export const VideoGallery: React.FC = () => {
     search: '',
   });
   const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [displayedCount, setDisplayedCount] = useState(ITEMS_PER_PAGE);
+  // const [displayedCount, setDisplayedCount] = useState(ITEMS_PER_PAGE); // Reserved for future use
 
   // Ref for infinite scroll trigger
-  const loadMoreRef = useRef<HTMLDivElement>(null);
+  // const loadMoreRef = useRef<HTMLDivElement>(null); // Reserved for future use
 
-  // Fetch all videos
+  // Fetch all videos (with pagination to get all)
   const { data: videos = [], isLoading, error } = useQuery({
     queryKey: ['videos'],
     queryFn: async () => {
-      const response = await api.get<Video[]>('/api/v1/videos');
-      return response.data;
+      try {
+        // Fetch first page to get total count
+        const firstPage = await api.get<{ videos: Video[]; total: number; page: number; limit: number; total_pages: number }>('/api/v1/videos/list', {
+          params: { page: 1, limit: 100 } // Max limit is 100
+        });
+        
+        const allVideos = [...(firstPage.data.videos || [])];
+        const totalPages = firstPage.data.total_pages || 1;
+        
+        // Fetch remaining pages if needed
+        if (totalPages > 1) {
+          const remainingPages = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) =>
+              api.get<{ videos: Video[]; total: number; page: number; limit: number; total_pages: number }>('/api/v1/videos/list', {
+                params: { page: i + 2, limit: 100 }
+              })
+            )
+          );
+          
+          remainingPages.forEach((page) => {
+            allVideos.push(...(page.data.videos || []));
+          });
+        }
+        
+        return allVideos;
+      } catch (err) {
+        console.error('Failed to fetch videos:', err);
+        throw err;
+      }
     },
     refetchInterval: 5000, // Refresh every 5 seconds
   });
@@ -98,17 +125,17 @@ export const VideoGallery: React.FC = () => {
   }, [videos]);
 
   const handleDelete = async (videoId: string) => {
-    if (!confirm('Are you sure you want to delete this video?')) {
+    if (!confirm('이 비디오를 삭제하시겠습니까?')) {
       return;
     }
 
     try {
       await api.delete(`/api/v1/videos/${videoId}`);
       queryClient.invalidateQueries({ queryKey: ['videos'] });
-      toast.success('Video deleted successfully');
+      toast.success('비디오가 삭제되었습니다');
     } catch (error) {
       console.error('Failed to delete video:', error);
-      toast.error('Failed to delete video');
+      toast.error('비디오 삭제에 실패했습니다');
     }
   };
 
@@ -133,7 +160,7 @@ export const VideoGallery: React.FC = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
-          Failed to load videos. Please try again later.
+          비디오를 불러올 수 없습니다. 나중에 다시 시도해주세요.
         </div>
       </div>
     );
@@ -143,10 +170,10 @@ export const VideoGallery: React.FC = () => {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Video Gallery</h2>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">비디오 갤러리</h2>
         <p className="text-gray-600">
-          {filteredAndSortedVideos.length} video{filteredAndSortedVideos.length !== 1 ? 's' : ''}
-          {hasActiveFilters && ` (filtered from ${videos.length} total)`}
+          {filteredAndSortedVideos.length}개의 비디오
+          {hasActiveFilters && ` (전체 ${videos.length}개 중 필터링됨)`}
         </p>
       </div>
 
@@ -156,13 +183,13 @@ export const VideoGallery: React.FC = () => {
           {/* Search */}
           <div className="lg:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Search Prompts
+              프롬프트 검색
             </label>
             <input
               type="text"
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              placeholder="Search by prompt..."
+              placeholder="프롬프트로 검색..."
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -170,7 +197,7 @@ export const VideoGallery: React.FC = () => {
           {/* Model Type Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Model Type
+              모델 유형
             </label>
             <select
               value={filters.modelType}
@@ -179,24 +206,24 @@ export const VideoGallery: React.FC = () => {
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Types</option>
-              <option value="t2v">T2V (Text-to-Video)</option>
-              <option value="i2v">I2V (Image-to-Video)</option>
-              <option value="df">DF (Diffusion Forcing)</option>
+              <option value="all">모든 유형</option>
+              <option value="t2v">T2V (텍스트-투-비디오)</option>
+              <option value="i2v">I2V (이미지-투-비디오)</option>
+              <option value="df">DF (확산 강제)</option>
             </select>
           </div>
 
           {/* Resolution Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Resolution
+              해상도
             </label>
             <select
               value={filters.resolution}
               onChange={(e) => setFilters({ ...filters, resolution: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Resolutions</option>
+              <option value="all">모든 해상도</option>
               {availableResolutions.map((res) => (
                 <option key={res} value={res}>
                   {res}
@@ -208,7 +235,7 @@ export const VideoGallery: React.FC = () => {
           {/* Status Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Status
+              상태
             </label>
             <select
               value={filters.status}
@@ -217,11 +244,11 @@ export const VideoGallery: React.FC = () => {
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Statuses</option>
-              <option value="completed">Completed</option>
-              <option value="processing">Processing</option>
-              <option value="queued">Queued</option>
-              <option value="failed">Failed</option>
+              <option value="all">모든 상태</option>
+              <option value="completed">완료됨</option>
+              <option value="processing">처리 중</option>
+              <option value="queued">대기 중</option>
+              <option value="failed">실패</option>
             </select>
           </div>
         </div>
@@ -229,16 +256,16 @@ export const VideoGallery: React.FC = () => {
         {/* Sort and Reset */}
         <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">Sort by:</label>
+            <label className="text-sm font-medium text-gray-700">정렬:</label>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
               className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-              <option value="status">Status</option>
-              <option value="model-type">Model Type</option>
+              <option value="newest">최신순</option>
+              <option value="oldest">오래된순</option>
+              <option value="status">상태순</option>
+              <option value="model-type">모델 유형순</option>
             </select>
           </div>
 
@@ -247,7 +274,7 @@ export const VideoGallery: React.FC = () => {
               onClick={resetFilters}
               className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
             >
-              Reset Filters
+              필터 초기화
             </button>
           )}
 
@@ -255,7 +282,7 @@ export const VideoGallery: React.FC = () => {
             {videos.filter((v) => v.status === 'processing').length > 0 && (
               <span className="flex items-center">
                 <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
-                {videos.filter((v) => v.status === 'processing').length} processing
+                {videos.filter((v) => v.status === 'processing').length}개 처리 중
               </span>
             )}
           </div>
@@ -283,19 +310,19 @@ export const VideoGallery: React.FC = () => {
             />
           </svg>
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {hasActiveFilters ? 'No videos match your filters' : 'No videos yet'}
+            {hasActiveFilters ? '필터에 맞는 비디오가 없습니다' : '아직 비디오가 없습니다'}
           </h3>
           <p className="text-gray-600">
             {hasActiveFilters
-              ? 'Try adjusting your filters'
-              : 'Generate your first video to see it here'}
+              ? '필터를 조정해보세요'
+              : '첫 번째 비디오를 생성하면 여기에 표시됩니다'}
           </p>
           {hasActiveFilters && (
             <button
               onClick={resetFilters}
               className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
-              Clear Filters
+              필터 지우기
             </button>
           )}
         </div>
