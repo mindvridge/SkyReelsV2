@@ -75,6 +75,11 @@ class VideoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime] = None
+    # Progress details (optional, from Celery task meta)
+    status_detail: Optional[str] = None
+    elapsed_seconds: Optional[int] = None
+    estimated_remaining_seconds: Optional[int] = None
+    device: Optional[str] = None  # Device used: "mps", "cpu", "cuda"
 
     class Config:
         from_attributes = True

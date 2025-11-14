@@ -38,40 +38,69 @@ export const VideoGallery: React.FC = () => {
   // const loadMoreRef = useRef<HTMLDivElement>(null); // Reserved for future use
 
   // Fetch all videos (with pagination to get all)
-  const { data: videos = [], isLoading, error } = useQuery({
+  const { data: videos = [], isLoading, error, refetch } = useQuery({
     queryKey: ['videos'],
     queryFn: async () => {
       try {
-        // Fetch first page to get total count
+        // 먼저 첫 페이지만 빠르게 가져오기 (성능 개선)
         const firstPage = await api.get<{ videos: Video[]; total: number; page: number; limit: number; total_pages: number }>('/api/v1/videos/list', {
-          params: { page: 1, limit: 100 } // Max limit is 100
+          params: { page: 1, limit: 100 }, // Max limit is 100
+          timeout: 5000, // 5초 타임아웃 (더 짧게 설정)
         });
         
         const allVideos = [...(firstPage.data.videos || [])];
         const totalPages = firstPage.data.total_pages || 1;
         
-        // Fetch remaining pages if needed
+        // 나머지 페이지는 백그라운드에서 가져오기 (첫 페이지는 먼저 표시)
         if (totalPages > 1) {
-          const remainingPages = await Promise.all(
+          // 비동기로 나머지 페이지 가져오기 (에러가 나도 첫 페이지는 표시)
+          Promise.all(
             Array.from({ length: totalPages - 1 }, (_, i) =>
               api.get<{ videos: Video[]; total: number; page: number; limit: number; total_pages: number }>('/api/v1/videos/list', {
-                params: { page: i + 2, limit: 100 }
+                params: { page: i + 2, limit: 100 },
+                timeout: 5000,
+              }).catch(err => {
+                console.warn(`Failed to fetch page ${i + 2}:`, err);
+                return null;
               })
             )
-          );
-          
-          remainingPages.forEach((page) => {
-            allVideos.push(...(page.data.videos || []));
+          ).then(remainingPages => {
+            const newVideos: Video[] = [];
+            remainingPages.forEach((page) => {
+              if (page?.data?.videos) {
+                newVideos.push(...page.data.videos);
+              }
+            });
+            if (newVideos.length > 0) {
+              // 쿼리 캐시 업데이트
+              queryClient.setQueryData(['videos'], [...allVideos, ...newVideos]);
+            }
+          }).catch(err => {
+            console.warn('Failed to fetch remaining pages:', err);
           });
         }
         
         return allVideos;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to fetch videos:', err);
+        const errorMessage = err?.response?.data?.detail || err?.message || '비디오 목록을 불러오는데 실패했습니다';
+        toast.error(errorMessage);
         throw err;
       }
     },
-    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchInterval: (query) => {
+      // 데이터가 없거나 에러가 있으면 refetch 안 함
+      if (!query.state.data || query.state.error) {
+        return false;
+      }
+      // 처리 중이거나 대기 중인 비디오가 있으면 3초마다, 없으면 갱신 안 함
+      const hasProcessing = query.state.data?.some(v => v.status === 'processing' || v.status === 'queued');
+      return hasProcessing ? 3000 : false;
+    },
+    retry: 1, // 1번만 재시도 (너무 많이 재시도하면 로딩이 길어짐)
+    retryDelay: 1000, // 1초 대기 후 재시도
+    staleTime: 5000, // 5초간 데이터를 fresh로 간주
+    gcTime: 30000, // 30초 후 캐시 삭제
   });
 
   // Filter and sort videos
@@ -124,9 +153,12 @@ export const VideoGallery: React.FC = () => {
     return Array.from(resolutions).sort();
   }, [videos]);
 
-  const handleDelete = async (videoId: string) => {
-    if (!confirm('이 비디오를 삭제하시겠습니까?')) {
+  const handleDelete = async (videoId: string, videoStatus?: string) => {
+    // 실패한 비디오는 확인 없이 바로 삭제
+    if (videoStatus !== 'failed') {
+      if (!confirm('이 비디오를 삭제하시겠습니까?')) {
       return;
+      }
     }
 
     try {
@@ -160,7 +192,29 @@ export const VideoGallery: React.FC = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
-          비디오를 불러올 수 없습니다. 나중에 다시 시도해주세요.
+          <p className="font-semibold mb-2">비디오를 불러올 수 없습니다.</p>
+          <p className="text-sm mb-4">
+            {error instanceof Error ? error.message : '서버 연결 오류가 발생했습니다.'}
+            {error instanceof Error && error.message.includes('timeout') && ' (요청 시간 초과)'}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          >
+            다시 시도
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  // 로딩 중일 때 더 명확한 메시지 표시
+  if (isLoading && videos.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">비디오 목록을 불러오는 중...</p>
         </div>
       </div>
     );
@@ -291,8 +345,15 @@ export const VideoGallery: React.FC = () => {
 
       {/* Gallery Grid */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600 mb-4">비디오 목록을 불러오는 중...</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            다시 시도
+          </button>
         </div>
       ) : filteredAndSortedVideos.length === 0 ? (
         <div className="text-center py-12">
@@ -332,7 +393,7 @@ export const VideoGallery: React.FC = () => {
             <VideoCard
               key={video.id}
               video={video}
-              onDelete={() => handleDelete(video.id)}
+              onDelete={() => handleDelete(video.id, video.status)}
             />
           ))}
         </div>

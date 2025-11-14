@@ -34,6 +34,11 @@ export interface Video {
   created_at: string;
   updated_at: string;
   completed_at?: string;
+  // Progress details (optional, from Celery task meta)
+  status_detail?: string;
+  elapsed_seconds?: number;
+  estimated_remaining_seconds?: number;
+  device?: string; // Device used: "mps", "cpu", "cuda"
 }
 
 export interface JobCreatedResponse {

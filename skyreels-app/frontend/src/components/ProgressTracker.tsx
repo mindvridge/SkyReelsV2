@@ -14,6 +14,35 @@ import { Loader2, CheckCircle, XCircle, Clock, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cancelVideo } from '@/services/api';
 
+// 시간 포맷팅 유틸리티 함수
+const formatRemainingTime = (seconds: number): string => {
+  if (seconds < 60) {
+    return `${seconds}초`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return secs > 0 ? `${minutes}분 ${secs}초` : `${minutes}분`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`;
+  }
+};
+
+const formatElapsedTime = (seconds: number): string => {
+  if (seconds < 60) {
+    return `${seconds}초`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}분 ${secs}초`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}시간 ${minutes}분`;
+  }
+};
+
 export const ProgressTracker: React.FC = () => {
   const { currentJobId, setCurrentJobId, setSelectedVideo } = useVideoStore();
   const [isCancelling, setIsCancelling] = React.useState(false);
@@ -81,9 +110,89 @@ export const ProgressTracker: React.FC = () => {
               <span className="text-sm font-medium">{getStatusText(video.status)}</span>
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress Bar with Details */}
             {(video.status === 'queued' || video.status === 'processing') && (
+              <div className="space-y-3">
+                {/* 진행률 및 시간 정보 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-gray-700">
+                      {video.progress}% 완료
+                    </span>
+                    {video.estimated_remaining_seconds !== undefined && video.estimated_remaining_seconds > 0 && (
+                      <span className="text-gray-600 font-medium">
+                        약 {formatRemainingTime(video.estimated_remaining_seconds)} 남음
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* 경과 시간 및 남은 시간 상세 정보 */}
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    {(() => {
+                      // elapsed_seconds가 없으면 created_at 기준으로 계산
+                      let elapsedSeconds = video.elapsed_seconds;
+                      if (elapsedSeconds === undefined && video.created_at) {
+                        // UTC 시간으로 파싱 (타임존 문제 해결)
+                        const created = new Date(video.created_at + (video.created_at.endsWith('Z') ? '' : 'Z'));
+                        const now = new Date();
+                        elapsedSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
+                      }
+                      // 음수이면 0으로, 9시간(32400초) 이상이면 0으로 표시
+                      if (elapsedSeconds !== undefined) {
+                        if (elapsedSeconds < 0 || elapsedSeconds > 32400) {
+                          elapsedSeconds = 0;
+                        }
+                        return (
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>경과 시간: {formatElapsedTime(elapsedSeconds)}</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          <span>경과 시간: 0초</span>
+                        </div>
+                      );
+                    })()}
+                    {video.estimated_remaining_seconds !== undefined && 
+                     video.estimated_remaining_seconds > 0 && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span>남은 시간: {formatRemainingTime(video.estimated_remaining_seconds)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* 진행률 바 */}
               <Progress value={video.progress} />
+                
+                {/* 상태 상세 정보 */}
+                <div className="flex items-center justify-between mt-1">
+                  {video.status_detail && (
+                    <div className="text-xs text-gray-500">
+                      {video.status_detail}
+                    </div>
+                  )}
+                  {/* Device Badge */}
+                  {video.device && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-semibold text-white ${
+                        video.device === 'mps'
+                          ? 'bg-purple-600'
+                          : video.device === 'cuda'
+                          ? 'bg-green-600'
+                          : 'bg-gray-600'
+                      }`}
+                      title={video.device === 'mps' ? 'Apple Silicon GPU 사용 중' : video.device === 'cuda' ? 'NVIDIA GPU 사용 중' : 'CPU 사용 중'}
+                    >
+                      {video.device.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
             )}
 
             {/* Prompt */}

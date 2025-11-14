@@ -62,7 +62,7 @@ async def generate_video(
             num_inference_steps=request.num_inference_steps,
             image_url=str(request.image_url) if request.image_url else None,
             status="queued",
-            progress=0,
+            progress=0,  # Will be updated to 1% when task starts
         )
 
         db.add(video)
@@ -123,6 +123,42 @@ async def get_video_status(
         if not video:
             raise HTTPException(status_code=404, detail="Video job not found")
 
+        # Get task meta information (Celery 확인 제거, created_at 기준으로만 계산)
+        task_meta = {}
+        if video.status in ["queued", "processing"] and video.created_at:
+            try:
+                # created_at 기준으로 경과 시간만 계산 (빠른 처리)
+                created_at_naive = video.created_at.replace(tzinfo=None) if video.created_at.tzinfo is None else video.created_at.replace(tzinfo=None)
+                elapsed = (datetime.utcnow() - created_at_naive).total_seconds()
+                
+                # 30분(1800초) 이상 대기 중이면 자동으로 실패 처리
+                if elapsed > 1800:  # 30 minutes
+                    video.status = "failed"
+                    video.error_message = f"작업이 30분 이상 대기 중이어서 자동으로 실패 처리되었습니다. (대기 시간: {int(elapsed/60)}분)"
+                    db.commit()
+                    logger.warning(f"Task {job_id} auto-failed after {int(elapsed/60)} minutes of queuing")
+                    task_meta = {
+                        "elapsed_seconds": int(elapsed),
+                        "status_detail": "작업 대기 시간 초과로 실패 처리됨",
+                    }
+                else:
+                    task_meta = {
+                        "elapsed_seconds": int(elapsed),
+                        "status_detail": "작업 대기 중..." if video.status == "queued" else "처리 중...",
+                    }
+                
+                # processing 상태인 경우 device 정보 가져오기 (개별 조회이므로 성능 문제 없음)
+                if video.status == "processing":
+                    try:
+                        task = celery_app.AsyncResult(str(job_id))
+                        if task and task.state == "PROCESSING" and task.info and isinstance(task.info, dict):
+                            task_meta["device"] = task.info.get("device")
+                    except Exception as device_error:
+                        logger.debug(f"Could not get device info for {job_id}: {device_error}")
+            except Exception as e:
+                logger.debug(f"Could not calculate elapsed time for {job_id}: {e}")
+                pass
+
         return VideoResponse(
             id=str(video.id),
             prompt=video.prompt,
@@ -139,6 +175,7 @@ async def get_video_status(
             created_at=video.created_at,
             updated_at=video.updated_at,
             completed_at=video.completed_at,
+            **task_meta,  # Include task meta information
         )
 
     except HTTPException:
@@ -181,13 +218,46 @@ async def list_videos(
         offset = (page - 1) * limit
         videos = query.order_by(desc(Video.created_at)).offset(offset).limit(limit).all()
 
-        # Convert to response models
-        video_responses = [
+        # Convert to response models with task meta information
+        # 성능 최적화: Celery task 확인을 최소화하고 created_at 기준으로만 경과 시간 계산
+        video_responses = []
+        for video in videos:
+            task_meta = {}
+            # queued나 processing 상태인 비디오만 경과 시간 계산 (Celery task 확인 제거)
+            if video.status in ["queued", "processing"] and video.created_at:
+                try:
+                    # created_at 기준으로 경과 시간만 계산 (빠른 처리)
+                    created_at_naive = video.created_at.replace(tzinfo=None) if video.created_at.tzinfo is None else video.created_at.replace(tzinfo=None)
+                    elapsed = (datetime.utcnow() - created_at_naive).total_seconds()
+                    
+                    # 30분(1800초) 이상 대기 중이면 자동으로 실패 처리
+                    if elapsed > 1800:  # 30 minutes
+                        video.status = "failed"
+                        video.error_message = f"작업이 30분 이상 대기 중이어서 자동으로 실패 처리되었습니다. (대기 시간: {int(elapsed/60)}분)"
+                        db.commit()
+                        logger.warning(f"Task {video.id} auto-failed after {int(elapsed/60)} minutes of queuing")
+                        task_meta = {
+                            "elapsed_seconds": int(elapsed),
+                            "status_detail": "작업 대기 시간 초과로 실패 처리됨",
+                        }
+                    else:
+                        task_meta = {
+                            "elapsed_seconds": int(elapsed),
+                            "status_detail": "작업 대기 중..." if video.status == "queued" else "처리 중...",
+                        }
+                    
+                    # device 정보는 성능 문제로 list_videos에서는 제외
+                    # device 정보는 개별 비디오 상태 조회(get_video_status)나 WebSocket에서만 가져옴
+                except Exception as e:
+                    logger.debug(f"Could not calculate elapsed time for {video.id}: {e}")
+                    pass
+
+            video_responses.append(
             VideoResponse(
                 id=str(video.id),
                 prompt=video.prompt,
                 model_type=video.model_type,
-                model_size=video.model_size,
+                    model_size=video.model_size,
                 resolution=video.resolution,
                 num_frames=video.num_frames,
                 guidance_scale=video.guidance_scale,
@@ -199,9 +269,9 @@ async def list_videos(
                 created_at=video.created_at,
                 updated_at=video.updated_at,
                 completed_at=video.completed_at,
+                    **task_meta,  # Include task meta information
+                )
             )
-            for video in videos
-        ]
 
         total_pages = (total + limit - 1) // limit
 
@@ -239,6 +309,16 @@ async def delete_video(
         if not video:
             raise HTTPException(status_code=404, detail="Video job not found")
 
+        # If video is queued or processing, cancel the Celery task first
+        was_processing = video.status == "processing"
+        if video.status in ["queued", "processing"]:
+            try:
+                celery_app.control.revoke(str(job_id), terminate=True)
+                logger.info(f"Cancelled Celery task for job: {job_id} before deletion")
+            except Exception as e:
+                logger.warning(f"Error revoking Celery task for {job_id}: {e}")
+                # Continue with deletion even if task revocation fails
+
         # Delete files from storage
         storage = StorageService(
             storage_type=settings.STORAGE_TYPE,
@@ -256,6 +336,21 @@ async def delete_video(
         db.commit()
 
         logger.info(f"Deleted video job: {job_id}")
+
+        # If we deleted a processing video, check if there are queued videos and start the next one
+        if was_processing:
+            try:
+                # Find the next queued video (oldest first)
+                next_video = db.query(Video).filter(
+                    Video.status == "queued"
+                ).order_by(Video.created_at.asc()).first()
+                
+                if next_video:
+                    # The Celery worker should automatically pick up the next task,
+                    # but we can verify it's in the queue
+                    logger.info(f"Next queued video found: {next_video.id}. Worker should start it automatically.")
+            except Exception as e:
+                logger.warning(f"Error checking for next queued video: {e}")
 
         return MessageResponse(message="Video deleted successfully")
 

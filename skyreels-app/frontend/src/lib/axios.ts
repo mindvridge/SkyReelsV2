@@ -6,9 +6,27 @@ import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'ax
 import toast from 'react-hot-toast';
 
 // Create axios instance with default config
+// In development mode, always use relative URLs to leverage Vite proxy
+// In production, use VITE_API_URL if set
+const getApiBaseURL = () => {
+  // In development (Vite dev server), always use relative URLs for proxy
+  if (import.meta.env.DEV) {
+    return ''; // Use relative URLs, Vite proxy will handle it
+  }
+  
+  // In production, use VITE_API_URL if set
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl.trim();
+  }
+  
+  // Fallback to relative URLs
+  return '';
+};
+
 export const api = axios.create({
-  baseURL: (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000',
-  timeout: 30000, // 30 seconds
+  baseURL: getApiBaseURL(),
+  timeout: 10000, // 10 seconds (비디오 목록 로딩 속도 개선)
   headers: {
     'Content-Type': 'application/json',
   },

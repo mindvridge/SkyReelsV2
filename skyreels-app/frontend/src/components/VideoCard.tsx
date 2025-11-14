@@ -7,6 +7,21 @@ import React, { useState, useRef } from 'react';
 import { Video } from '@/types/video';
 import { formatDate, getStatusColor, getStatusText } from '@/lib/utils';
 
+// 시간 포맷팅 유틸리티 함수
+const formatRemainingTime = (seconds: number): string => {
+  if (seconds < 60) {
+    return `${seconds}초`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return secs > 0 ? `${minutes}분 ${secs}초` : `${minutes}분`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`;
+  }
+};
+
 interface VideoCardProps {
   video: Video;
   onClick?: () => void;
@@ -21,7 +36,18 @@ export const VideoCard: React.FC<VideoCardProps> = ({
   showActions = true,
 }) => {
   const [isHovering, setIsHovering] = useState(false);
+  const [, setTick] = useState(0); // 강제 리렌더링을 위한 state
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // 처리 중이거나 대기 중일 때 1초마다 리렌더링하여 경과 시간을 실시간 업데이트
+  React.useEffect(() => {
+    if (video.status === 'processing' || video.status === 'queued') {
+      const interval = setInterval(() => {
+        setTick(prev => prev + 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [video.status]);
 
   const handleMouseEnter = () => {
     setIsHovering(true);
@@ -82,19 +108,90 @@ export const VideoCard: React.FC<VideoCardProps> = ({
             )}
           </>
         ) : video.status === 'processing' || video.status === 'queued' ? (
-          <div className="w-full h-full flex flex-col items-center justify-center">
+          <div className="w-full h-full flex flex-col items-center justify-center p-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-white text-sm">
+            <p className="text-white text-sm font-medium mb-2">
               {video.status === 'queued' ? '대기 중...' : '처리 중...'}
             </p>
-            {video.progress !== undefined && video.progress > 0 && (
-              <div className="w-3/4 bg-gray-700 rounded-full h-2 mt-2">
+            
+            {/* 진행률 퍼센트 - queued/processing 상태에서도 표시 */}
+            <div className="w-full max-w-xs space-y-2">
+              {/* 진행률 및 시간 정보 */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-white text-xs mb-1">
+                  <span className="font-semibold">
+                    {(() => {
+                      if (video.status === 'queued') {
+                        return '대기 중...';
+                      } else if (video.progress > 0) {
+                        return `${video.progress}% 완료`;
+                      } else {
+                        return '시작 중...';
+                      }
+                    })()}
+                  </span>
+                  {video.estimated_remaining_seconds !== undefined && 
+                   video.estimated_remaining_seconds > 0 && (
+                    <span className="text-gray-300">
+                      약 {formatRemainingTime(video.estimated_remaining_seconds)} 남음
+                    </span>
+                  )}
+                </div>
+                
+                {/* 경과 시간 정보 - 항상 실시간 계산 */}
+                <div className="flex items-center justify-center text-gray-300 text-xs">
+                  {(() => {
+                    // 항상 created_at 기준으로 실시간 계산 (1초마다 갱신됨)
+                    if (video.created_at) {
+                      // UTC 시간으로 파싱 (타임존 문제 해결)
+                      const created = new Date(video.created_at + (video.created_at.endsWith('Z') ? '' : 'Z'));
+                      const now = new Date();
+                      let elapsedSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
+                      
+                      // 음수이면 0으로, 9시간(32400초) 이상이면 0으로 표시
+                      if (elapsedSeconds < 0 || elapsedSeconds > 32400) {
+                        elapsedSeconds = 0;
+                      }
+                      
+                      return (
+                        <span className="text-gray-400">
+                          경과: {formatRemainingTime(elapsedSeconds)}
+                        </span>
+                      );
+                    }
+                    // created_at이 없으면 0초 표시
+                    return (
+                      <span className="text-gray-400">
+                        경과: 0초
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+              
+              {/* 진행률 바 - queued/processing 상태에서도 최소 1% 표시 */}
+              <div className="w-full bg-gray-700 rounded-full h-2.5">
                 <div
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${video.progress}%` }}
+                  className="bg-blue-500 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.max(video.progress || 0, 1)}%` }}
                 ></div>
               </div>
-            )}
+              
+              {/* 상세 정보 */}
+              {video.status_detail ? (
+                <p className="text-gray-300 text-xs text-center mt-1">
+                  {video.status_detail}
+                </p>
+              ) : video.status === 'queued' ? (
+                <p className="text-gray-300 text-xs text-center mt-1">
+                  작업이 시작되기를 기다리고 있습니다...
+                </p>
+              ) : video.status === 'processing' && video.progress === 0 ? (
+                <p className="text-gray-300 text-xs text-center mt-1">
+                  작업을 시작하고 있습니다...
+                </p>
+              ) : null}
+            </div>
           </div>
         ) : video.status === 'failed' ? (
           <div className="w-full h-full flex flex-col items-center justify-center">
@@ -120,7 +217,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({
         )}
 
         {/* Status Badge */}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex gap-1">
           <span
             className={`px-2 py-1 rounded-full text-xs font-semibold text-white ${getStatusColor(
               video.status
@@ -128,6 +225,21 @@ export const VideoCard: React.FC<VideoCardProps> = ({
           >
             {getStatusText(video.status)}
           </span>
+          {/* Device Badge - Show only when processing */}
+          {video.status === 'processing' && video.device && (
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-semibold text-white ${
+                video.device === 'mps'
+                  ? 'bg-purple-600'
+                  : video.device === 'cuda'
+                  ? 'bg-green-600'
+                  : 'bg-gray-600'
+              }`}
+              title={video.device === 'mps' ? 'Apple Silicon GPU 사용 중' : video.device === 'cuda' ? 'NVIDIA GPU 사용 중' : 'CPU 사용 중'}
+            >
+              {video.device.toUpperCase()}
+            </span>
+          )}
         </div>
 
         {/* Model Info Badge */}

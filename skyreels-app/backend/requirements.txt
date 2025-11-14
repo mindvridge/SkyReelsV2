@@ -24,12 +24,12 @@ diffusers>=0.31.0
 transformers==4.49.0
 tokenizers==0.21.1
 accelerate==1.6.0
-safetensors==0.4.2
+safetensors>=0.4.3
 Pillow==10.2.0
 
 # SkyReels V2 Specific
-flash-attn
-xfuser
+# flash-attn  # CUDA only, not needed for macOS MPS
+# xfuser  # CUDA only, not needed for macOS MPS
 easydict
 ftfy
 numpy>=1.23.5,<2

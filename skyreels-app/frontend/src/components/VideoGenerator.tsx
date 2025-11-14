@@ -16,7 +16,7 @@ import { ChevronDown, ChevronUp, Sparkles, Save, Clock, Trash2, X } from 'lucide
 import type { VideoCreateRequest } from '@/types/video';
 import { getAllPresets, getPresetById, savePreset, deletePreset } from '@/lib/presets';
 import { getPromptHistory, addToPromptHistory, removeFromPromptHistory } from '@/lib/promptHistory';
-import { saveSettings, loadSettings, clearSettings } from '@/lib/settingsStorage';
+import { saveSettings, loadSettings, clearSettings, saveQuickPreset, loadQuickPreset, clearQuickPreset, saveSelectedPresetId, loadSelectedPresetId, clearSelectedPresetId } from '@/lib/settingsStorage';
 import { estimateCompletionTime, formatEstimatedTime } from '@/store/notificationStore';
 import toast from 'react-hot-toast';
 
@@ -31,19 +31,57 @@ export const VideoGenerator: React.FC = () => {
   const [promptHistory, setPromptHistory] = useState(getPromptHistory());
   const [useAdvancedEditor, setUseAdvancedEditor] = useState(false);
   const [showPromptHistory, setShowPromptHistory] = useState(false);
+  const [hasQuickPreset, setHasQuickPreset] = useState(!!loadQuickPreset());
 
-  // Load saved settings on mount
+  // Load saved settings and quick preset on mount
   React.useEffect(() => {
-    const saved = loadSettings();
-    if (saved) {
+    // 먼저 빠른 프리셋 확인 (우선순위 높음)
+    const quickPreset = loadQuickPreset();
+    if (quickPreset) {
       setForm({
-        modelType: saved.modelType as any,
-        modelSize: saved.modelSize as any,
-        resolution: saved.resolution as any,
-        numFrames: saved.numFrames,
-        guidanceScale: saved.guidanceScale,
-        numInferenceSteps: saved.numInferenceSteps,
+        prompt: quickPreset.prompt || '',
+        modelType: quickPreset.modelType as any,
+        modelSize: quickPreset.modelSize as any,
+        resolution: quickPreset.resolution as any,
+        numFrames: quickPreset.numFrames,
+        guidanceScale: quickPreset.guidanceScale,
+        numInferenceSteps: quickPreset.numInferenceSteps,
+        imageUrl: quickPreset.imageUrl || '',
       });
+      setHasQuickPreset(true);
+      toast.success('빠른 프리셋이 자동으로 불러와졌습니다');
+    } else {
+      // 빠른 프리셋이 없으면 선택한 프리셋 확인
+      const savedPresetId = loadSelectedPresetId();
+      if (savedPresetId) {
+        const preset = getPresetById(savedPresetId);
+        if (preset) {
+          setForm({
+            modelType: preset.modelType,
+            modelSize: preset.modelSize,
+            resolution: preset.resolution,
+            numFrames: preset.numFrames,
+            guidanceScale: preset.guidanceScale,
+            numInferenceSteps: preset.numInferenceSteps,
+          });
+          setSelectedPresetId(savedPresetId);
+          toast.success(`프리셋 "${preset.name}"이 자동으로 불러와졌습니다`);
+        }
+      } else {
+        // 프리셋도 없으면 일반 설정 불러오기
+        const saved = loadSettings();
+        if (saved) {
+          setForm({
+            modelType: saved.modelType as any,
+            modelSize: saved.modelSize as any,
+            resolution: saved.resolution as any,
+            numFrames: saved.numFrames,
+            guidanceScale: saved.guidanceScale,
+            numInferenceSteps: saved.numInferenceSteps,
+          });
+        }
+      }
+      setHasQuickPreset(false);
     }
   }, []);
 
@@ -121,6 +159,7 @@ export const VideoGenerator: React.FC = () => {
   const handleLoadPreset = (presetId: string) => {
     if (!presetId) {
       setSelectedPresetId('');
+      clearSelectedPresetId();
       return;
     }
 
@@ -135,6 +174,7 @@ export const VideoGenerator: React.FC = () => {
         numInferenceSteps: preset.numInferenceSteps,
       });
       setSelectedPresetId(presetId);
+      saveSelectedPresetId(presetId); // 선택한 프리셋 ID 저장
       toast.success(`프리셋 로드됨: ${preset.name}`);
     }
   };
@@ -203,6 +243,36 @@ export const VideoGenerator: React.FC = () => {
     toast.success('히스토리에서 제거되었습니다');
   };
 
+  // Save quick preset (빠른 프리셋 저장)
+  const handleSaveQuickPreset = () => {
+    try {
+      saveQuickPreset({
+        prompt: form.prompt,
+        modelType: form.modelType,
+        modelSize: form.modelSize,
+        resolution: form.resolution,
+        numFrames: form.numFrames,
+        guidanceScale: form.guidanceScale,
+        numInferenceSteps: form.numInferenceSteps,
+        imageUrl: form.imageUrl,
+      });
+      setHasQuickPreset(true);
+      toast.success('빠른 프리셋이 저장되었습니다. 다음에 접속하면 자동으로 불러옵니다.');
+    } catch (error) {
+      console.error('Error saving quick preset:', error);
+      toast.error('빠른 프리셋 저장에 실패했습니다');
+    }
+  };
+
+  // Clear quick preset (빠른 프리셋 삭제)
+  const handleClearQuickPreset = () => {
+    if (confirm('빠른 프리셋을 삭제하시겠습니까?')) {
+      clearQuickPreset();
+      setHasQuickPreset(false);
+      toast.success('빠른 프리셋이 삭제되었습니다');
+    }
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
@@ -215,7 +285,32 @@ export const VideoGenerator: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Presets */}
           <div className="space-y-2">
-            <Label htmlFor="preset">빠른 프리셋</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="preset">빠른 프리셋</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveQuickPreset}
+                  title="현재 설정을 빠른 프리셋으로 저장 (다음 접속 시 자동 불러오기)"
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  빠른 프리셋 저장
+                </Button>
+                {hasQuickPreset && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearQuickPreset}
+                    title="저장된 빠른 프리셋 삭제"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="flex gap-2">
               <Select
                 id="preset"

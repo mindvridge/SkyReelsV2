@@ -99,13 +99,13 @@ function App() {
                   {isCancellingAll ? '취소 중...' : '전체 멈추기'}
                 </span>
               </button>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                <Settings className="h-5 w-5 text-gray-700" />
+            <button
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              <Settings className="h-5 w-5 text-gray-700" />
                 <span className="text-sm font-medium text-gray-700">설정</span>
-              </button>
+            </button>
             </div>
           </div>
         </div>

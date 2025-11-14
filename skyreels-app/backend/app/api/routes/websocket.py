@@ -128,6 +128,58 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
         video = db.query(Video).filter(Video.id == job_id).first()
 
         if video:
+            # Get Celery task meta information for initial status
+            task_meta = {}
+            try:
+                from app.services.queue import celery_app
+                from datetime import datetime
+                task = celery_app.AsyncResult(str(video.id))
+                if task:
+                    # Check task state
+                    if task.state == "PROCESSING" and task.info:
+                        if isinstance(task.info, dict):
+                            task_meta = {
+                                "status_detail": task.info.get("status"),
+                                "elapsed_seconds": task.info.get("elapsed_seconds"),
+                                "estimated_remaining_seconds": task.info.get("estimated_remaining_seconds"),
+                                "device": task.info.get("device"),
+                            }
+                    elif task.state == "FAILURE":
+                        # Task failed - update video status if still queued/processing
+                        if video.status in ["queued", "processing"]:
+                            video.status = "failed"
+                            if task.info and isinstance(task.info, dict):
+                                error_msg = task.info.get("error", str(task.info))
+                                video.error_message = f"Task failed: {error_msg}"
+                            else:
+                                video.error_message = "Task execution failed"
+                            db.commit()
+                            logger.warning(f"Task {job_id} failed, updated video status to failed")
+                    elif task.state == "PENDING" and video.status == "queued":
+                        # Task is still pending (queued) - calculate elapsed time from created_at
+                        if video.created_at:
+                            # 타임존 문제 해결: created_at이 naive datetime이면 UTC로 가정
+                            created_at_naive = video.created_at.replace(tzinfo=None) if video.created_at.tzinfo is None else video.created_at.replace(tzinfo=None)
+                            elapsed = (datetime.utcnow() - created_at_naive).total_seconds()
+                            
+                            # 30분(1800초) 이상 대기 중이면 자동으로 실패 처리
+                            if elapsed > 1800:  # 30 minutes
+                                video.status = "failed"
+                                video.error_message = f"작업이 30분 이상 대기 중이어서 자동으로 실패 처리되었습니다. (대기 시간: {int(elapsed/60)}분)"
+                                db.commit()
+                                logger.warning(f"Task {job_id} auto-failed after {int(elapsed/60)} minutes of queuing")
+                                task_meta = {
+                                    "elapsed_seconds": int(elapsed),
+                                    "status_detail": "작업 대기 시간 초과로 실패 처리됨",
+                                }
+                            else:
+                                task_meta = {
+                                    "elapsed_seconds": int(elapsed),
+                                    "status_detail": "작업 대기 중...",
+                                }
+            except Exception as e:
+                logger.debug(f"Could not get task meta for {job_id}: {e}")
+
             await manager.send_personal_message({
                 "type": "progress",
                 "video": {
@@ -146,6 +198,7 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
                     "video_url": video.video_url,
                     "error_message": video.error_message,
                     "image_url": video.image_url,
+                    **task_meta,  # Include task meta information
                 }
             }, websocket)
         else:
@@ -173,6 +226,58 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
                 last_status = video.status
                 last_progress = video.progress or 0
 
+                # Get Celery task meta information for progress details
+                task_meta = {}
+                try:
+                    from app.services.queue import celery_app
+                    from datetime import datetime
+                    task = celery_app.AsyncResult(str(video.id))
+                    if task:
+                        # Check task state
+                        if task.state == "PROCESSING" and task.info:
+                            if isinstance(task.info, dict):
+                                task_meta = {
+                                    "status_detail": task.info.get("status"),
+                                    "elapsed_seconds": task.info.get("elapsed_seconds"),
+                                    "estimated_remaining_seconds": task.info.get("estimated_remaining_seconds"),
+                                    "device": task.info.get("device"),
+                                }
+                        elif task.state == "FAILURE":
+                            # Task failed - update video status if still queued/processing
+                            if video.status in ["queued", "processing"]:
+                                video.status = "failed"
+                                if task.info and isinstance(task.info, dict):
+                                    error_msg = task.info.get("error", str(task.info))
+                                    video.error_message = f"Task failed: {error_msg}"
+                                else:
+                                    video.error_message = "Task execution failed"
+                                db.commit()
+                                logger.warning(f"Task {job_id} failed, updated video status to failed")
+                        elif task.state == "PENDING" and video.status == "queued":
+                            # Task is still pending (queued) - calculate elapsed time from created_at
+                            if video.created_at:
+                                # 타임존 문제 해결: created_at이 naive datetime이면 UTC로 가정
+                                created_at_naive = video.created_at.replace(tzinfo=None) if video.created_at.tzinfo is None else video.created_at.replace(tzinfo=None)
+                                elapsed = (datetime.utcnow() - created_at_naive).total_seconds()
+                                
+                                # 30분(1800초) 이상 대기 중이면 자동으로 실패 처리
+                                if elapsed > 1800:  # 30 minutes
+                                    video.status = "failed"
+                                    video.error_message = f"작업이 30분 이상 대기 중이어서 자동으로 실패 처리되었습니다. (대기 시간: {int(elapsed/60)}분)"
+                                    db.commit()
+                                    logger.warning(f"Task {job_id} auto-failed after {int(elapsed/60)} minutes of queuing")
+                                    task_meta = {
+                                        "elapsed_seconds": int(elapsed),
+                                        "status_detail": "작업 대기 시간 초과로 실패 처리됨",
+                                    }
+                                else:
+                                    task_meta = {
+                                        "elapsed_seconds": int(elapsed),
+                                        "status_detail": "작업 대기 중...",
+                                    }
+                except Exception as e:
+                    logger.debug(f"Could not get task meta for {job_id}: {e}")
+
                 # Send update
                 await manager.send_personal_message({
                     "type": "progress",
@@ -192,6 +297,7 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
                         "video_url": video.video_url,
                         "error_message": video.error_message,
                         "image_url": video.image_url,
+                        **task_meta,  # Include task meta information
                     }
                 }, websocket)
 
