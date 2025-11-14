@@ -1,4 +1,4 @@
-"""API middleware for CORS, error handling, and logging"""
+"""API middleware for CORS, error handling, logging, and metrics"""
 
 import time
 import logging
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware for logging requests and responses"""
+    """Middleware for logging requests, responses, and collecting metrics"""
 
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
@@ -31,6 +31,20 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
             # Add processing time header
             response.headers["X-Process-Time"] = str(process_time)
+
+            # Record metrics (only for API endpoints, not static files)
+            if request.url.path.startswith("/api/"):
+                try:
+                    from app.services.monitoring import get_metrics_collector
+                    collector = get_metrics_collector()
+                    collector.record_api_request(
+                        endpoint=request.url.path,
+                        method=request.method,
+                        status_code=response.status_code,
+                        duration=process_time,
+                    )
+                except Exception as metric_error:
+                    logger.debug(f"Failed to record metrics: {metric_error}")
 
             return response
 
