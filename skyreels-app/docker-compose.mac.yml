@@ -1,0 +1,44 @@
+# macOS용 Docker Compose 오버라이드 설정
+# 사용법: docker-compose -f docker-compose.yml -f docker-compose.mac.yml up
+
+version: '3.8'
+
+services:
+  # Celery Worker - GPU 설정 제거 (macOS용)
+  celery-worker:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'  # CPU 코어 제한
+          memory: 16G  # 메모리 제한
+        # GPU 설정 제거됨 - macOS는 NVIDIA GPU 미지원
+    environment:
+      - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/storage
+      - SKYREELS_MODEL_CACHE=/models
+      - DEFAULT_RESOLUTION=540P
+      - PYTORCH_ENABLE_MPS_FALLBACK=1  # Apple Silicon MPS 폴백 활성화
+
+  # Backend - macOS 최적화
+  backend:
+    environment:
+      - DATABASE_URL=postgresql://skyreels:skyreels@postgres:5432/skyreels
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - STORAGE_TYPE=local
+      - LOCAL_STORAGE_PATH=/app/storage
+      - SKYREELS_MODEL_CACHE=/models
+      - DEFAULT_RESOLUTION=540P
+      - CORS_ORIGINS=["http://localhost:3000", "http://localhost:80", "http://localhost"]
+      - WS_CHECK_ORIGIN=false  # 개발 모드
+
+  # Frontend - macOS 포트 설정
+  frontend:
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_WS_URL=ws://localhost:8000
